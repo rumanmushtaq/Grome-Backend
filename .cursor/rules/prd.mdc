@@ -1,0 +1,237 @@
+# 1 — High-level architecture
+
+* API: **NestJS (TypeScript)**, modular architecture (feature modules).
+* DB: **MongoDB Atlas** (replica set; later shard). Use **Mongoose** or **TypeORM-like wrapper for Mongo** (Mongoose recommended).
+* Auth: **Custom Auth** — email/phone + password (bcrypt) + JWT access tokens + refresh tokens stored server-side (or rotating refresh tokens). Support OAuth2 (Google/Apple).
+* Real-time: **Socket.IO** with **Redis adapter** for horizontal scaling (pub/sub across nodes).
+* File storage: **AWS S3** (presigned uploads for mobile), CloudFront for CDN.
+* Queues & background jobs: **BullMQ** (Redis) for notifications, payment webhooks, report generation.
+* Cache & rate-limit: **Redis** (cache commonly-read queries, session/ratelimit, pub/sub).
+* Search: **Elasticsearch** or **MongoDB Atlas Search** for barber discovery.
+* Payments: Stripe + MBWay; handle via secure server-side webhooks + idempotency keys.
+* Monitoring: Prometheus + Grafana or DataDog; Sentry for error tracing; ELK/CloudWatch for logs.
+* CI/CD: GitHub Actions -> build/test -> Docker image -> deploy to Kubernetes (EKS) or AWS ECS Fargate. Use infra as code (Terraform).
+
+# 2 — Module decomposition (NestJS modules)
+
+Create independent Nest modules (each module has controller/service/repo/dto):
+
+* Auth (signup, signin, refresh, verify, password reset)
+* Users (profile, roles)
+* Barbers (verification workflow, services, availability)
+* Services (catalog of barber services)
+* Bookings (instant/scheduled bookings, ETA, state machine)
+* Payments (Stripe integration, payouts, commissions)
+* Chat (Socket.IO events, message store)
+* Notifications (FCM/Push + email via SES)
+* Wallet (balance, payouts)
+* PromoCodes / Loyalty
+* Admin (moderation, dashboards, campaigns)
+* Reports / Analytics (async)
+* Media (S3 + CDN presigned URLs)
+* Search (search/filters)
+* Shared (logging, guards, interceptors, common DTOs)
+
+# 3 — Authentication & security
+
+* Passwords hashed with **bcrypt** (saltRounds >= 12).
+* JWT access token short-lived (e.g., 15m). Refresh token long-lived (e.g., 30d) and stored **hashed** in DB with device metadata & rotation. Use refresh-token rotation to prevent reuse.
+* Use **RefreshToken** collection: `{ userId, tokenHash, deviceId, ip, userAgent, expiresAt }`.
+* Email verification tokens, password reset tokens: stored in DB with expiry.
+* Implement RBAC via roles (user/barber/admin) and route guards.
+* Rate-limiting per IP & per user (Redis) for auth endpoints.
+* Validate file uploads type/size server-side; scan files (virus scanning optional).
+
+# 4 — Core data models (Mongoose-style sketches)
+
+Note: use objectId references and subdocuments only where appropriate.
+
+### User
+
+```ts
+const UserSchema = new Schema({
+  email: { type: String, unique: true, sparse: true, index: true },
+  phone: { type: String, unique: true, sparse: true, index: true },
+  passwordHash: String,
+  name: String,
+  role: { type: String, enum: ['customer','barber','admin'], default: 'customer' },
+  avatarUrl: String,
+  isVerified: { type: Boolean, default: false },
+  createdAt: Date,
+  updatedAt: Date,
+  // optional KYC for barbers:
+  verification: {
+    status: { type: String, enum: ['pending','approved','rejected'], default:'pending' },
+    idDocUrl: String,
+    certificateUrls: [String],
+    notes: String
+  }
+});
+```
+
+### Barber (separate or embedded partial)
+
+```ts
+const BarberSchema = new Schema({
+  userId: { type: ObjectId, ref: 'User', index: true },
+  location: { type: { type: String, enum: ['Point']}, coordinates: [Number] }, // GeoJSON
+  services: [{ serviceId: ObjectId, price: Number, duration: Number }],
+  rating: { type: Number, default: 0 },
+  reviewsCount: { type: Number, default: 0 },
+  availability: {
+    // structured availability/calendar; sync with bookings
+  },
+  experienceYears: Number,
+  images: [String]
+});
+BarberSchema.index({ location: '2dsphere' });
+```
+
+### Service
+
+```ts
+{ name, description, basePrice, durationMinutes, category, tags }
+```
+
+### Booking
+
+```ts
+const BookingSchema = new Schema({
+  customerId: { type: ObjectId, ref: 'User', index: true },
+  barberId: { type: ObjectId, ref: 'Barber', index: true },
+  services: [{ serviceId, price }],
+  scheduledAt: Date,
+  createdAt: Date,
+  status: { type: String, enum: ['requested','accepted','in_progress','completed','cancelled'] },
+  location: { type: { type: String, enum: ['Point']}, coordinates: [Number] }, // if on-the-way bookings
+  eta: Date,
+  payment: {
+    status, amount, stripePaymentId, commission, payoutAmount
+  }
+});
+BookingSchema.index({ barberId:1, scheduledAt:1 });
+```
+
+### ChatMessage
+
+```ts
+{ conversationId, fromUserId, toUserId, message, attachments: [url], sentAt, readAt }
+```
+
+### PromoCode, WalletTransaction, Review, AuditLog, Notification, etc.
+
+# 5 — Indexing strategy & DB tips
+
+* Geolocation: `2dsphere` index on barber.location for nearby searches.
+* Common filters: index `barberId`, `customerId`, `status`, and `scheduledAt` for bookings.
+* Text search: use Mongo Atlas full-text or external Elastic for heavy searches.
+* Keep large chat/message collections with TTL or partitioning (archive old conversations).
+* Avoid large arrays in documents; store references for unbounded lists (e.g., reviews).
+
+# 6 — Real-time chat & live tracking
+
+* Use **Socket.IO** with sticky sessions or use an external message broker (Redis) and Socket.IO Redis adapter.
+* For scaling: run multiple node instances behind a LB and use `socket.io-redis` adapter so events route across nodes.
+* Persist chat messages to MongoDB in a write-optimized way (batch writes), and push notifications through BullMQ.
+* Live tracking: have a `location-updates` channel. Keep last-known location in Redis with short TTL; archive only periodic snapshots into Mongo for history.
+
+# 7 — Payments & commissions
+
+* Use server-side Stripe integration. Keep payment state in `Payment` collection. Use webhooks with idempotency keys processed through queues (BullMQ).
+* Commission calculation: store commission rules per barber/category. Compute payout amounts during booking settlement.
+* For payouts: consider Stripe Connect for platform payouts to barbers (if supported in target geography) or manual payout schedule via bank transfer.
+
+# 8 — Background jobs & workflows
+
+* **BullMQ (Redis)** for:
+
+  * Sending push notifications / emails
+  * Processing Stripe webhooks
+  * Generating reports
+  * Calculating loyalty rewards, expired booking cleanup
+* Use chaining and retry policies; persist job logs.
+
+# 9 — API design (REST + versioning)
+
+* Base: `api/v1/`
+* Key endpoints (representative):
+
+  * `POST /v1/auth/signup` `POST /v1/auth/login` `POST /v1/auth/refresh`
+  * `GET /v1/barbers?lat=&lng=&radius=&service=&sort=distance|rating&page=&limit=`
+  * `GET /v1/barbers/:id`
+  * `POST /v1/bookings` `GET /v1/bookings/:id` `PATCH /v1/bookings/:id/cancel`
+  * `POST /v1/payments/stripe-webhook` (idempotent)
+  * `POST /v1/chat/conversations` `GET /v1/chat/conversations/:id/messages`
+  * `GET /v1/admin/reports`
+* Use DTOs and validation pipes in NestJS for input validation (class-validator).
+* Use pagination (cursor-based for large lists) rather than skip/limit for bookings & history.
+
+# 10 — Rate limits, security, audits
+
+* Global rate-limiter (per-IP) using Redis.
+* Endpoint-specific limits (e.g., auth endpoints).
+* Audit logs for admin actions & payments.
+* Use helmet, CORS whitelist, CSP headers.
+* Penetration tests and dependency vulnerability scans.
+
+# 11 — Scalability & operational considerations
+
+* Containers: Docker images for app; orchestrate with Kubernetes (recommended) or ECS. Autoscale by CPU/RPS.
+* Stateless API servers; Redis for sessions/locks & BullMQ.
+* DB: start Atlas replica set; enable backups; move to sharding when > TB or > high write throughput.
+* Use Horizontal Pod Autoscaler and metrics-based scaling.
+* Use feature flags (LaunchDarkly or homemade) for gradual rollouts.
+* Use blue/green or canary deploys for zero-downtime.
+
+# 12 — Observability & SLOs
+
+* Collect metrics: request latency, error rates, queue lengths, Redis hits.
+* Tracing: OpenTelemetry + Jaeger.
+* Alerts for outages, error spikes, failed jobs.
+* Sentry for exceptions.
+
+# 13 — Dev practices & infra
+
+* Contract-first APIs: auto-generate Swagger docs from NestJS decorators.
+* Unit tests (Jest) and e2e tests (Supertest) for critical flows (auth, booking, payments).
+* Infrastructure as Code: Terraform modules (VPC, EKS/ECS, RDS if needed).
+* Secrets management: AWS Secrets Manager or HashiCorp Vault.
+* Database migrations: use **mongock** or change management process for schema changes.
+
+# 14 — Initial MVP roadmap & priorities (first 4–8 weeks)
+
+1. Project scaffold (NestJS monorepo), CI/CD, infra skeleton (dev/staging).
+2. Auth (email/phone), User, Barber profile, Services, S3 uploads.
+3. Barber discovery (geo search) + basic booking flow (create/cancel/accept).
+4. Stripe payment integration (test mode) + Booking payment capture.
+5. Socket.IO basic (notifications + chat skeleton).
+6. Admin module with user approval flows (barber verification).
+7. Add background workers (BullMQ) and monitoring.
+
+# 15 — Example file structure (NestJS)
+
+```
+/src
+  /modules
+    /auth
+    /users
+    /barbers
+    /bookings
+    /payments
+    /chat
+    /admin
+    /notifications
+    /media
+    /common
+  /config
+  /jobs
+  /dto
+  /schemas
+  main.ts
+```
+
+# 16 — Concrete next steps I can do for you right now
+
+* produce full **Mongoose schemas + DTOs + sample NestJS controllers/services** for 6–8 core entities (User, Barber, Booking, Service, Payment, Chat).
+* build **Auth module** with JWT + refresh token rotation (code scaffold).
+* generate **API spec (OpenAPI/Swagger)** for all endpoints
