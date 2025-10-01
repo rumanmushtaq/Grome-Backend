@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { SignUpDto, SignInDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto, VerifyEmailDto, VerifyPhoneDto, ResendPhoneVerificationDto, ChangePasswordDto, AuthResponseDto, SocialSignInDto } from '../../dto/auth/auth.dto';
+import { SignUpDto, SignInDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto, VerifyEmailDto, VerifyPhoneDto, ResendPhoneVerificationDto, ChangePasswordDto, AuthResponseDto, SocialSignInDto, BarberSignUpDto } from '../../dto/auth/auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -15,8 +15,25 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'User successfully registered', type: AuthResponseDto })
   @ApiResponse({ status: 409, description: 'User already exists' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
-  async signUp(@Body() signUpDto: SignUpDto): Promise<AuthResponseDto> {
-    return this.authService.signUp(signUpDto);
+  async signUp(@Body() signUpDto: SignUpDto, @Request() req): Promise<AuthResponseDto> {
+    const deviceInfo = {
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    };
+    return this.authService.signUp(signUpDto, deviceInfo);
+  }
+
+  @Post('barber-signup')
+  @ApiOperation({ summary: 'Register a new barber' })
+  @ApiResponse({ status: 201, description: 'Barber successfully registered', type: AuthResponseDto })
+  @ApiResponse({ status: 409, description: 'Barber already exists' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  async barberSignUp(@Body() barberSignUpDto: BarberSignUpDto, @Request() req): Promise<AuthResponseDto> {
+    const deviceInfo = {
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    };
+    return this.authService.barberSignUp(barberSignUpDto, deviceInfo);
   }
 
   @Post('signin')

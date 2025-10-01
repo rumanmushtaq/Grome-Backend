@@ -7,22 +7,24 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
 import { User, UserDocument } from '../../schemas/user.schema';
+import { Barber, BarberDocument } from '../../schemas/barber.schema';
 import { RefreshToken, RefreshTokenDocument } from '../../schemas/refresh-token.schema';
-import { SignUpDto, SignInDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto, VerifyEmailDto, VerifyPhoneDto, ChangePasswordDto, AuthResponseDto, SocialSignInDto } from '../../dto/auth/auth.dto';
+import { SignUpDto, SignInDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto, VerifyEmailDto, VerifyPhoneDto, ChangePasswordDto, AuthResponseDto, SocialSignInDto, BarberSignUpDto } from '../../dto/auth/auth.dto';
 import { OtpService } from './otp.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
     @InjectModel(RefreshToken.name) private refreshTokenModel: Model<RefreshTokenDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
     private otpService: OtpService,
   ) { }
 
-  async signUp(signUpDto: SignUpDto): Promise<AuthResponseDto> {
-    const { email, phone, password, name, role } = signUpDto;
+  async signUp(signUpDto: SignUpDto, deviceInfo?: any): Promise<AuthResponseDto> {
+    const { email, phone, password, name, deviceId, deviceName, deviceType } = signUpDto;
 
     // Check if user already exists
     const existingUser = await this.userModel.findOne({
@@ -43,7 +45,7 @@ export class AuthService {
       phone,
       passwordHash,
       name,
-      role,
+      role: 'customer',
       isVerified: false,
       isActive: true,
     });
@@ -58,8 +60,116 @@ export class AuthService {
     user.phoneVerificationExpires = otpResult.expiresAt;
     await user.save();
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user._id.toString(), user.role);
+    // Generate tokens with device information
+    const tokens = await this.generateTokens(user._id.toString(), user.role, {
+      deviceId: deviceId || uuidv4(),
+      deviceName,
+      deviceType,
+      ...deviceInfo,
+    });
+
+    return {
+      ...tokens,
+      tokenType: 'Bearer',
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+        isVerified: user.isVerified,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  }
+
+  async barberSignUp(barberSignUpDto: BarberSignUpDto, deviceInfo?: any): Promise<AuthResponseDto> {
+    const { 
+      name, 
+      shopName, 
+      email, 
+      phone, 
+      password, 
+      profileImage, 
+      idDocument1, 
+      idDocument2, 
+      location, 
+      yearsOfExperience, 
+      services,
+      deviceId, 
+      deviceName, 
+      deviceType 
+    } = barberSignUpDto;
+
+    // Check if user already exists
+    const existingUser = await this.userModel.findOne({
+      $or: [{ email }, { phone }],
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email or phone already exists');
+    }
+
+    // Hash password
+    const saltRounds = 12;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Create user first
+    const user = new this.userModel({
+      email,
+      phone,
+      passwordHash,
+      name,
+      shopName,
+      role: 'barber',
+      avatarUrl: profileImage,
+      isVerified: false,
+      isActive: true,
+      verification: {
+        status: 'pending',
+        idDocUrl: idDocument1,
+        certificateUrls: [idDocument2],
+        submittedAt: new Date(),
+      },
+    });
+
+    await user.save();
+
+    // Create barber profile
+    const barber = new this.barberModel({
+      userId: user._id,
+      location: {
+        type: 'Point',
+        coordinates: [location.longitude, location.latitude],
+      },
+      services: services.map(service => ({
+        serviceId: service.serviceId,
+        price: service.price,
+      })),
+      experienceYears: yearsOfExperience,
+      images: [profileImage],
+      identificationDocuments: [idDocument1, idDocument2],
+      isActive: true,
+      isOnline: false,
+    });
+
+    await barber.save();
+
+    // Send OTP to phone using Prelude.so
+    const otpResult = await this.otpService.sendOtp(phone);
+    
+    // Update user with verification ID
+    user.phoneVerificationId = otpResult.verificationId;
+    user.phoneVerificationExpires = otpResult.expiresAt;
+    await user.save();
+
+    // Generate tokens with device information
+    const tokens = await this.generateTokens(user._id.toString(), user.role, {
+      deviceId: deviceId || uuidv4(),
+      deviceName,
+      deviceType,
+      ...deviceInfo,
+    });
 
     return {
       ...tokens,

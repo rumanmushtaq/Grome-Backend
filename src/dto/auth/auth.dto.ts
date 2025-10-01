@@ -1,4 +1,5 @@
-import { IsEmail, IsString, IsOptional, IsPhoneNumber, MinLength, IsEnum, IsBoolean } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsPhoneNumber, MinLength, IsEnum, IsBoolean, IsNumber, IsArray, ValidateNested, Min, IsMongoId } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../schemas/user.schema';
 
@@ -20,10 +21,20 @@ export class SignUpDto {
   @IsString()
   name: string;
 
-  @ApiPropertyOptional({ description: 'User role', enum: UserRole, default: UserRole.CUSTOMER })
+  @ApiPropertyOptional({ description: 'Device ID for refresh token tracking' })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole = UserRole.CUSTOMER;
+  @IsString()
+  deviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Device name' })
+  @IsOptional()
+  @IsString()
+  deviceName?: string;
+
+  @ApiPropertyOptional({ description: 'Device type' })
+  @IsOptional()
+  @IsString()
+  deviceType?: string;
 }
 
 export class SignInDto {
@@ -120,6 +131,93 @@ export class SocialSignInDto {
   @ApiProperty({ description: 'ID token from social provider' })
   @IsString()
   idToken: string;
+
+  @ApiPropertyOptional({ description: 'Device ID for refresh token tracking' })
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Device name' })
+  @IsOptional()
+  @IsString()
+  deviceName?: string;
+
+  @ApiPropertyOptional({ description: 'Device type' })
+  @IsOptional()
+  @IsString()
+  deviceType?: string;
+}
+
+export class BarberServiceSelectionDto {
+  @ApiProperty({ description: 'Service ID (MongoDB ObjectId)' })
+  @IsMongoId()
+  serviceId: string;
+
+  @ApiProperty({ description: 'Custom price for this service' })
+  @IsNumber()
+  @Min(0)
+  price: number;
+}
+
+export class LocationDto {
+  @ApiProperty({ description: 'Longitude' })
+  @IsNumber()
+  longitude: number;
+
+  @ApiProperty({ description: 'Latitude' })
+  @IsNumber()
+  latitude: number;
+}
+
+export class BarberSignUpDto {
+  @ApiProperty({ description: 'Barber full name' })
+  @IsString()
+  name: string;
+
+  @ApiProperty({ description: 'Shop name' })
+  @IsString()
+  shopName: string;
+
+  @ApiProperty({ description: 'Barber email address' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Barber phone number' })
+  @IsPhoneNumber()
+  phone: string;
+
+  @ApiProperty({ description: 'Barber password', minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @ApiProperty({ description: 'Profile image URL' })
+  @IsString()
+  profileImage: string;
+
+  @ApiProperty({ description: 'First identification document URL' })
+  @IsString()
+  idDocument1: string;
+
+  @ApiProperty({ description: 'Second identification document URL' })
+  @IsString()
+  idDocument2: string;
+
+  @ApiProperty({ description: 'Barber location' })
+  @ValidateNested()
+  @Type(() => LocationDto)
+  location: LocationDto;
+
+  @ApiProperty({ description: 'Years of experience' })
+  @IsNumber()
+  @Min(0)
+  yearsOfExperience: number;
+
+  @ApiProperty({ description: 'Selected services with custom pricing', type: [BarberServiceSelectionDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BarberServiceSelectionDto)
+  services: BarberServiceSelectionDto[];
 
   @ApiPropertyOptional({ description: 'Device ID for refresh token tracking' })
   @IsOptional()

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsArray, IsBoolean, IsObject, ValidateNested, Min, Max, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray, IsBoolean, IsObject, ValidateNested, Min, Max, IsEnum, IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -81,19 +81,14 @@ export class AvailabilityDto {
 }
 
 export class BarberServiceDto {
-  @ApiProperty({ description: 'Service ID' })
-  @IsString()
+  @ApiProperty({ description: 'Service ID (MongoDB ObjectId)' })
+  @IsMongoId()
   serviceId: string;
 
   @ApiProperty({ description: 'Service price' })
   @IsNumber()
   @Min(0)
   price: number;
-
-  @ApiProperty({ description: 'Service duration in minutes' })
-  @IsNumber()
-  @Min(15)
-  duration: number;
 }
 
 export class BankDetailsDto {
@@ -255,9 +250,9 @@ export class SearchBarbersDto {
   @Max(100)
   radius?: number = 10;
 
-  @ApiPropertyOptional({ description: 'Service ID to filter by' })
+  @ApiPropertyOptional({ description: 'Service ID to filter by (MongoDB ObjectId)' })
   @IsOptional()
-  @IsString()
+  @IsMongoId()
   serviceId?: string;
 
   @ApiPropertyOptional({ description: 'Minimum rating', minimum: 0, maximum: 5 })
@@ -308,7 +303,6 @@ export class BarberResponseDto {
   services: Array<{
     serviceId: string;
     price: number;
-    duration: number;
   }>;
 
   @ApiProperty({ description: 'Average rating' })
