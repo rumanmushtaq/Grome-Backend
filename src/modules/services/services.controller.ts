@@ -15,6 +15,13 @@ export class ServicesController {
     return this.servicesService.findAll();
   }
 
+  @Get('available')
+  @ApiOperation({ summary: 'Get all available services for barber selection' })
+  @ApiResponse({ status: 200, description: 'Available services retrieved successfully' })
+  async getAvailableServices() {
+    return this.servicesService.findAll();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiParam({ name: 'id', description: 'Service ID' })

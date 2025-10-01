@@ -29,6 +29,9 @@ export class User {
   @Prop({ required: true })
   name: string;
 
+  @Prop()
+  shopName?: string;
+
   @Prop({ 
     type: String, 
     enum: Object.values(UserRole), 
