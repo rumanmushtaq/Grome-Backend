@@ -27,12 +27,10 @@ export class Barber {
   @Prop([{
     serviceId: { type: Types.ObjectId, ref: 'Service', required: true },
     price: { type: Number, required: true, min: 0 },
-    duration: { type: Number, required: true, min: 15 }, // in minutes
   }])
   services: Array<{
     serviceId: Types.ObjectId;
     price: number;
-    duration: number;
   }>;
 
   @Prop({ default: 0, min: 0, max: 5 })
@@ -159,6 +157,9 @@ export class Barber {
 
   @Prop([String])
   images: string[];
+
+  @Prop([String])
+  identificationDocuments: string[];
 
   @Prop()
   bio?: string;

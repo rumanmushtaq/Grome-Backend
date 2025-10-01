@@ -17,6 +17,7 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 
 // Schemas
 import { User, UserSchema } from '../../schemas/user.schema';
+import { Barber, BarberSchema } from '../../schemas/barber.schema';
 import { RefreshToken, RefreshTokenSchema } from '../../schemas/refresh-token.schema';
 
 // DTOs
@@ -38,6 +39,7 @@ import { AuthResponseDto } from '../../dto/auth/auth.dto';
     }),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
+      { name: Barber.name, schema: BarberSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),
   ],
