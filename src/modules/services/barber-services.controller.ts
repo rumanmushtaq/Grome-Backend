@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, UseGuards, Request, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
 import { BarberServicesService } from './barber-services.service';
@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../schemas/user.schema';
+import { PaginationDto } from '@/dto/common/pagination.dto';
 
 @ApiTags('barber-services')
 @Controller('barber/services')
@@ -16,14 +17,23 @@ import { UserRole } from '../../schemas/user.schema';
 export class BarberServicesController {
   constructor(private readonly barberServicesService: BarberServicesService) {}
 
-  @Get()
-  @ApiOperation({ summary: 'Get barber services' })
-  @ApiResponse({ status: 200, description: 'Barber services retrieved successfully', type: [BarberServiceResponseDto] })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Barber access required' })
-  async getBarberServices(@Request() req) {
-    return this.barberServicesService.getBarberServices(req.user.userId);
-  }
+@Get()
+@ApiOperation({ summary: 'Get barber services (paginated)' })
+@ApiResponse({
+  status: 200,
+  description: 'Barber services retrieved successfully',
+  type: [BarberServiceResponseDto],
+})
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+@ApiResponse({ status: 403, description: 'Forbidden - Barber access required' })
+async getBarberServices(
+  @Request() req,
+  @Query() query: PaginationDto,
+) {
+ 
+  return this.barberServicesService.getBarberServices(req.user.userId, query);
+}
+
 
   @Post('add')
   @HttpCode(HttpStatus.CREATED)

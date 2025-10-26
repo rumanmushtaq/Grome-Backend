@@ -31,6 +31,7 @@ import { JobsModule } from './jobs/jobs.module';
 // Configuration
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
+import { S3StorageModule } from './modules/s3Storage/s3Storage.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { validationSchema } from './config/validation.schema';
     // Feature modules
     AuthModule,
     UsersModule,
+    S3StorageModule,
     BarbersModule,
     ServicesModule,
     BookingsModule,

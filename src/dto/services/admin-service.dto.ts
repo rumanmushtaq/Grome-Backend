@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsArray, IsEnum, IsOptional, Min, IsUrl } from 'class-validator';
+import { IsString, IsNumber, IsArray, IsEnum, IsOptional, Min, IsUrl, IsInt, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ServiceCategory } from '../../schemas/service.schema';
 
@@ -19,6 +19,11 @@ export class AdminCreateServiceDto {
   @ApiProperty({ description: 'Service category', enum: ServiceCategory })
   @IsEnum(ServiceCategory)
   category: ServiceCategory;
+
+  @ApiProperty({ description: 'Service duration in minutes' })
+  @IsInt()
+  @Min(5)
+  durationMinutes: number;
 
   @ApiProperty({ description: 'Service tags', type: [String] })
   @IsArray()
@@ -67,7 +72,7 @@ export class AdminUpdateServiceDto {
 
   @ApiPropertyOptional({ description: 'Is service active' })
   @IsOptional()
-  @IsString()
+  @IsBoolean()
   isActive?: boolean;
 
   @ApiPropertyOptional({ description: 'Sort order for display' })

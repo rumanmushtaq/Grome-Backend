@@ -1,127 +1,324 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-
-import { Service, ServiceDocument } from '../../schemas/service.schema';
-import { AdminCreateServiceDto, AdminUpdateServiceDto } from '../../dto/services/admin-service.dto';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { isValidObjectId, Model } from "mongoose";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import { Service, ServiceDocument } from "../../schemas/service.schema";
+import {
+  AdminCreateServiceDto,
+  AdminUpdateServiceDto,
+} from "../../dto/services/admin-service.dto";
+import { PaginationDto } from "@/dto/common/pagination.dto";
 
 @Injectable()
 export class AdminServicesService {
   constructor(
-    @InjectModel(Service.name) private serviceModel: Model<ServiceDocument>,
+    @InjectModel(Service.name) private serviceModel: Model<ServiceDocument>
   ) {}
 
-  async createService(createServiceDto: AdminCreateServiceDto): Promise<ServiceDocument> {
-    const { title, basePrice, icon, category, tags } = createServiceDto;
+  // async createService(
+  //   createServiceDto: AdminCreateServiceDto
+  // ): Promise<ServiceDocument> {
+  async createService(
+    createServiceDto: AdminCreateServiceDto
+  ): Promise<object> {
+    const { title, basePrice, icon, durationMinutes, category, tags } =
+      createServiceDto;
 
-    // Check if service with same title already exists
-    const existingService = await this.serviceModel.findOne({ 
-      name: title,
-      isActive: true 
-    });
-
-    if (existingService) {
-      throw new BadRequestException('Service with this title already exists');
-    }
-
-    const service = new this.serviceModel({
-      name: title,
-      basePrice,
-      iconUrl: icon,
-      category,
-      tags,
-      isActive: true,
-      averageRating: 0,
-      bookingsCount: 0,
-      sortOrder: 0,
-    });
-
-    return service.save();
-  }
-
-  async getAllServices(): Promise<ServiceDocument[]> {
-    return this.serviceModel
-      .find()
-      .sort({ sortOrder: 1, createdAt: -1 })
-      .exec();
-  }
-
-  async getServiceById(id: string): Promise<ServiceDocument> {
-    const service = await this.serviceModel.findById(id).exec();
-    
-    if (!service) {
-      throw new NotFoundException('Service not found');
-    }
-
-    return service;
-  }
-
-  async updateService(id: string, updateServiceDto: AdminUpdateServiceDto): Promise<ServiceDocument> {
-    const service = await this.serviceModel.findById(id);
-    
-    if (!service) {
-      throw new NotFoundException('Service not found');
-    }
-
-    // Check if updating name and it conflicts with existing service
-    if (updateServiceDto.title && updateServiceDto.title !== service.name) {
-      const existingService = await this.serviceModel.findOne({ 
-        name: updateServiceDto.title,
-        _id: { $ne: id },
-        isActive: true 
+    try {
+      const existingService = await this.serviceModel.findOne({
+        name: title,
+        isActive: true,
       });
 
       if (existingService) {
-        throw new BadRequestException('Service with this title already exists');
+        throw new BadRequestException("Service with this title already exists");
       }
+      const service = new this.serviceModel({
+        name: title,
+        basePrice,
+        iconUrl: icon,
+        category,
+        tags,
+        durationMinutes,
+        isActive: true,
+        averageRating: 0,
+        bookingsCount: 0,
+        sortOrder: 0,
+      });
+
+      await service.save();
+      return {
+        status: 201,
+        message: "Service created successfully",
+      };
+    } catch (error) {
+      // await this.logService.create({
+      //   message: error.message,
+      //   dir: filename,
+      //   type: ErrorStatus.ERROR,
+      //   errorCode: HttpStatus.FORBIDDEN,
+      // });
+
+      throw new BadRequestException(error.message);
     }
-
-    // Update fields
-    if (updateServiceDto.title) service.name = updateServiceDto.title;
-    if (updateServiceDto.basePrice !== undefined) service.basePrice = updateServiceDto.basePrice;
-    if (updateServiceDto.icon) service.iconUrl = updateServiceDto.icon;
-    if (updateServiceDto.category) service.category = updateServiceDto.category;
-    if (updateServiceDto.tags) service.tags = updateServiceDto.tags;
-    if (updateServiceDto.description) service.description = updateServiceDto.description;
-    if (updateServiceDto.images) service.images = updateServiceDto.images;
-    if (updateServiceDto.isActive !== undefined) service.isActive = updateServiceDto.isActive;
-    if (updateServiceDto.sortOrder !== undefined) service.sortOrder = updateServiceDto.sortOrder;
-
-    return service.save();
+    // Check if service with same title already exists
   }
 
-  async deleteService(id: string): Promise<void> {
-    const service = await this.serviceModel.findById(id);
-    
-    if (!service) {
-      throw new NotFoundException('Service not found');
-    }
+  async getAllServices(
+    query: PaginationDto
+  ): Promise<{ message: string; meta: any; data: any[] }> {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        sortBy = "createdAt",
+        sortOrder = "desc",
+      } = query;
 
-    // Soft delete - just deactivate
-    service.isActive = false;
-    await service.save();
+      const skip = (page - 1) * limit;
+      const sortDirection = sortOrder === "asc" ? 1 : -1;
+
+      // Fetch total count (all services, active or inactive)
+      const totalItems = await this.serviceModel.countDocuments();
+
+      // Fetch paginated services
+      const services = await this.serviceModel
+        .find()
+        .sort({ [sortBy]: sortDirection })
+        .skip(skip)
+        .limit(limit)
+        .exec();
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalItems / limit);
+
+      return {
+        message: "Services retrieved successfully",
+        meta: {
+          totalItems,
+          totalPages,
+          currentPage: page,
+          limit,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+        data: services,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException("Failed to fetch services");
+    }
   }
 
-  async activateService(id: string): Promise<ServiceDocument> {
-    const service = await this.serviceModel.findById(id);
-    
-    if (!service) {
-      throw new NotFoundException('Service not found');
-    }
+  async getServiceById(
+    id: string
+  ): Promise<{ message: string; data: ServiceDocument }> {
+    try {
+      // Validate ID format
+      if (!isValidObjectId(id)) {
+        throw new BadRequestException("Invalid service ID format");
+      }
 
-    service.isActive = true;
-    return service.save();
+      // Find the service by ID
+      const service = await this.serviceModel.findById(id).exec();
+
+      // Handle case when service not found
+      if (!service) {
+        throw new NotFoundException("Service not found");
+      }
+      // ✅ 4. Return structured response
+      return {
+        message: "Service retrieved successfully",
+        data: service,
+      };
+    } catch (error) {
+      // ✅ 5. Known NestJS exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // ✅ 6. Unexpected or DB errors
+      throw new InternalServerErrorException(
+        "Failed to retrieve service. Please try again later."
+      );
+    }
   }
 
-  async deactivateService(id: string): Promise<ServiceDocument> {
-    const service = await this.serviceModel.findById(id);
-    
-    if (!service) {
-      throw new NotFoundException('Service not found');
-    }
+  async updateService(
+    id: string,
+    updateServiceDto: AdminUpdateServiceDto
+  ): Promise<{ message: string; data: ServiceDocument }> {
+    try {
+      // Find the service by ID
+      const service = await this.serviceModel.findById(id);
 
-    service.isActive = false;
-    return service.save();
+      if (!service) {
+        throw new NotFoundException({
+          message: "Service not found",
+          error: true,
+          statusCode: 404,
+        });
+      }
+
+      // Check for title conflicts (if title is being updated)
+      if (updateServiceDto.title && updateServiceDto.title !== service.name) {
+        const existingService = await this.serviceModel.findOne({
+          name: updateServiceDto.title,
+          _id: { $ne: id },
+          isActive: true,
+        });
+
+        if (existingService) {
+          throw new BadRequestException({
+            message: "A service with this title already exists",
+            error: true,
+            statusCode: 400,
+          });
+        }
+      }
+
+      // Update fields
+      if (updateServiceDto.title) service.name = updateServiceDto.title;
+      if (updateServiceDto.basePrice !== undefined)
+        service.basePrice = updateServiceDto.basePrice;
+      if (updateServiceDto.icon) service.iconUrl = updateServiceDto.icon;
+      if (updateServiceDto.category)
+        service.category = updateServiceDto.category;
+      if (updateServiceDto.tags) service.tags = updateServiceDto.tags;
+      if (updateServiceDto.description)
+        service.description = updateServiceDto.description;
+      if (updateServiceDto.images) service.images = updateServiceDto.images;
+      if (updateServiceDto.isActive !== undefined)
+        service.isActive = updateServiceDto.isActive;
+      if (updateServiceDto.sortOrder !== undefined)
+        service.sortOrder = updateServiceDto.sortOrder;
+
+      const updatedService = await service.save();
+
+      return {
+        message: "Service updated successfully",
+
+        data: updatedService,
+      };
+    } catch (error) {
+      // Handle MongoDB errors or validation issues
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      throw new BadRequestException({
+        message:
+          error.message ||
+          "An unexpected error occurred while updating the service",
+        error: true,
+        statusCode: 400,
+      });
+    }
+  }
+
+  async deleteService(id: string): Promise<{ message: string; data: any }> {
+    try {
+      // ✅ 1. Validate ID format
+      if (!isValidObjectId(id)) {
+        throw new BadRequestException("Invalid service ID format");
+      }
+
+      // ✅ 2. Find the service by ID
+      const service = await this.serviceModel.findById(id);
+      if (!service) {
+        throw new NotFoundException("Service not found");
+      }
+
+      // ✅ 3. Check if already inactive
+      if (!service.isActive) {
+        return {
+          message: "Service is already inactive",
+          data: service,
+        };
+      }
+
+      // ✅ 4. Soft delete (deactivate)
+      service.isActive = false;
+      await service.save();
+
+      // ✅ 5. Return structured response
+      return {
+        message: "Service deactivated successfully",
+        data: service,
+      };
+    } catch (error) {
+      // ✅ Handle expected NestJS exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // ✅ Unexpected errors
+      throw new InternalServerErrorException(
+        "Failed to deactivate service. Please try again later."
+      );
+    }
+  }
+
+  async updateServiceStatus(
+    id: string,
+    isActive: boolean
+  ): Promise<{ message: string; data: ServiceDocument }> {
+    try {
+      // ✅ 1. Validate ObjectId
+      if (!isValidObjectId(id)) {
+        throw new BadRequestException("Invalid service ID format");
+      }
+
+      // ✅ 2. Find the service
+      const service = await this.serviceModel.findById(id);
+      if (!service) {
+        throw new NotFoundException("Service not found");
+      }
+
+      // ✅ 3. Check if already active
+      if (service.isActive === isActive) {
+        return {
+          message: `Service is already ${isActive ? "active" : "inactive"}`,
+          data: service,
+        };
+      }
+
+      // ✅ 4. Activate the service
+      service.isActive = isActive;
+      const updateService = await service.save();
+
+      // ✅ 5. Return structured response
+      return {
+        message: `Service ${isActive ? "activated" : "deactivated"} successfully`,
+        data: updateService,
+      };
+    } catch (error) {
+      // ✅ Handle known exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // ✅ Catch-all for unexpected errors
+      throw new InternalServerErrorException(
+        "Failed to activate service. Please try again later."
+      );
+    }
   }
 
   async getServicesByCategory(category: string): Promise<ServiceDocument[]> {
@@ -138,9 +335,9 @@ export class AdminServicesService {
           { isActive: true },
           {
             $or: [
-              { name: { $regex: query, $options: 'i' } },
-              { description: { $regex: query, $options: 'i' } },
-              { tags: { $in: [new RegExp(query, 'i')] } },
+              { name: { $regex: query, $options: "i" } },
+              { description: { $regex: query, $options: "i" } },
+              { tags: { $in: [new RegExp(query, "i")] } },
             ],
           },
         ],

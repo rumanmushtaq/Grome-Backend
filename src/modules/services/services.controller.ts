@@ -1,25 +1,27 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 
 import { ServicesService } from './services.service';
+import { PaginationDto } from '@/dto/common/pagination.dto';
 
 @ApiTags('services')
 @Controller('services')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
-  @Get()
-  @ApiOperation({ summary: 'Get all services' })
-  @ApiResponse({ status: 200, description: 'Services retrieved successfully' })
-  async findAll() {
-    return this.servicesService.findAll();
-  }
+@Get()
+@ApiOperation({ summary: 'Get all services (with pagination)' })
+@ApiResponse({ status: 200, description: 'Services retrieved successfully' })
+@ApiResponse({ status: 400, description: 'Invalid query parameters' })
+async findAll(@Query() query: PaginationDto) {
+  return this.servicesService.findAll(query);
+}
 
   @Get('available')
   @ApiOperation({ summary: 'Get all available services for barber selection' })
   @ApiResponse({ status: 200, description: 'Available services retrieved successfully' })
-  async getAvailableServices() {
-    return this.servicesService.findAll();
+  async getAvailableServices(@Query() query: PaginationDto) {
+    return this.servicesService.findAll(query);
   }
 
   @Get(':id')
