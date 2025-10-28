@@ -17,6 +17,8 @@ export enum VerificationStatus {
 
 @Schema({ timestamps: true })
 export class User {
+  _id?: any;
+
   @Prop({ type: String, unique: true, sparse: true, index: true })
   email?: string;
 

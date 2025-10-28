@@ -4,13 +4,19 @@ import { Document, Types } from 'mongoose';
 export type NotificationDocument = Notification & Document;
 
 export enum NotificationType {
+  
+  //////Bookings
   BOOKING_CREATED = 'booking_created',
   BOOKING_ACCEPTED = 'booking_accepted',
   BOOKING_CANCELLED = 'booking_cancelled',
   BOOKING_COMPLETED = 'booking_completed',
   BOOKING_REMINDER = 'booking_reminder',
+
+/////Payment
   PAYMENT_SUCCESS = 'payment_success',
   PAYMENT_FAILED = 'payment_failed',
+
+  ////Message
   MESSAGE_RECEIVED = 'message_received',
   REVIEW_REQUEST = 'review_request',
   PROMO_CODE = 'promo_code',
