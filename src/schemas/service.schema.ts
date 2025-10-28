@@ -1,15 +1,15 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type ServiceDocument = Service & Document;
 
 export enum ServiceCategory {
-  HAIRCUT = 'haircut',
-  BEARD = 'beard',
-  STYLING = 'styling',
-  COLORING = 'coloring',
-  TREATMENT = 'treatment',
-  OTHER = 'other',
+  HAIRCUT = "haircut",
+  BEARD = "beard",
+  STYLING = "styling",
+  COLORING = "coloring",
+  TREATMENT = "treatment",
+  OTHER = "other",
 }
 
 @Schema({ timestamps: true })
@@ -23,13 +23,13 @@ export class Service {
   @Prop({ required: true, min: 0 })
   basePrice: number;
 
-  @Prop({ required: true, min: 15 }) // minimum 15 minutes
+  @Prop({ required: false, default: 15, min: 5 })
   durationMinutes: number;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(ServiceCategory), 
-    default: ServiceCategory.OTHER 
+  @Prop({
+    type: String,
+    enum: Object.values(ServiceCategory),
+    default: ServiceCategory.OTHER,
   })
   category: ServiceCategory;
 
@@ -74,12 +74,14 @@ export class Service {
   };
 
   // Pricing tiers (if applicable)
-  @Prop([{
-    name: { type: String, required: true },
-    price: { type: Number, required: true, min: 0 },
-    duration: { type: Number, required: true, min: 15 },
-    description: String,
-  }])
+  @Prop([
+    {
+      name: { type: String, required: true },
+      price: { type: Number, required: true, min: 0 },
+      duration: { type: Number, required: true, min: 15 },
+      description: String,
+    },
+  ])
   pricingTiers: Array<{
     name: string;
     price: number;
@@ -115,4 +117,4 @@ ServiceSchema.index({ durationMinutes: 1 });
 ServiceSchema.index({ averageRating: -1 });
 ServiceSchema.index({ bookingsCount: -1 });
 ServiceSchema.index({ tags: 1 });
-ServiceSchema.index({ name: 'text', description: 'text', tags: 'text' });
+ServiceSchema.index({ name: "text", description: "text", tags: "text" });
