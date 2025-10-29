@@ -1,30 +1,57 @@
-import { Injectable, UnauthorizedException, BadRequestException, ConflictException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+  HttpException,
+} from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import * as bcrypt from "bcrypt";
+import { v4 as uuidv4 } from "uuid";
 
-import { User, UserDocument } from '../../schemas/user.schema';
-import { Barber, BarberDocument } from '../../schemas/barber.schema';
-import { RefreshToken, RefreshTokenDocument } from '../../schemas/refresh-token.schema';
-import { SignUpDto, SignInDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto, VerifyEmailDto, VerifyPhoneDto, ChangePasswordDto, AuthResponseDto, SocialSignInDto, BarberSignUpDto } from '../../dto/auth/auth.dto';
-import { OtpService } from './otp.service';
+import { User, UserDocument } from "../../schemas/user.schema";
+import { Barber, BarberDocument } from "../../schemas/barber.schema";
+import {
+  RefreshToken,
+  RefreshTokenDocument,
+} from "../../schemas/refresh-token.schema";
+import {
+  SignUpDto,
+  SignInDto,
+  RefreshTokenDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+  VerifyPhoneDto,
+  ChangePasswordDto,
+  AuthResponseDto,
+  SocialSignInDto,
+  BarberSignUpDto,
+} from "../../dto/auth/auth.dto";
+import { OtpService } from "./otp.service";
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
-    @InjectModel(RefreshToken.name) private refreshTokenModel: Model<RefreshTokenDocument>,
+    @InjectModel(RefreshToken.name)
+    private refreshTokenModel: Model<RefreshTokenDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
-    private otpService: OtpService,
-  ) { }
+    private otpService: OtpService
+  ) {}
 
-  async signUp(signUpDto: SignUpDto, deviceInfo?: any): Promise<AuthResponseDto> {
-    const { email, phone, password, name, deviceId, deviceName, deviceType } = signUpDto;
+  async signUp(
+    signUpDto: SignUpDto,
+    deviceInfo?: any
+  ): Promise<AuthResponseDto> {
+    const { email, phone, password, name, deviceId, deviceName, deviceType } =
+      signUpDto;
 
     // Check if user already exists
     const existingUser = await this.userModel.findOne({
@@ -32,7 +59,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email or phone already exists');
+      throw new ConflictException(
+        "User with this email or phone already exists"
+      );
     }
 
     // Hash password
@@ -45,7 +74,7 @@ export class AuthService {
       phone,
       passwordHash,
       name,
-      role: 'customer',
+      role: "customer",
       isVerified: false,
       isActive: true,
     });
@@ -54,7 +83,7 @@ export class AuthService {
 
     // Send OTP to phone using Prelude.so
     const otpResult = await this.otpService.sendOtp(phone);
-    
+
     // Update user with verification ID
     user.phoneVerificationId = otpResult.verificationId;
     user.phoneVerificationExpires = otpResult.expiresAt;
@@ -70,7 +99,7 @@ export class AuthService {
 
     return {
       ...tokens,
-      tokenType: 'Bearer',
+      tokenType: "Bearer",
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -83,22 +112,25 @@ export class AuthService {
     };
   }
 
-  async barberSignUp(barberSignUpDto: BarberSignUpDto, deviceInfo?: any): Promise<AuthResponseDto> {
-    const { 
-      name, 
-      shopName, 
-      email, 
-      phone, 
-      password, 
-      profileImage, 
-      idDocument1, 
-      idDocument2, 
-      location, 
-      yearsOfExperience, 
+  async barberSignUp(
+    barberSignUpDto: BarberSignUpDto,
+    deviceInfo?: any
+  ): Promise<AuthResponseDto> {
+    const {
+      name,
+      shopName,
+      email,
+      phone,
+      password,
+      profileImage,
+      idDocument1,
+      idDocument2,
+      location,
+      yearsOfExperience,
       services,
-      deviceId, 
-      deviceName, 
-      deviceType 
+      deviceId,
+      deviceName,
+      deviceType,
     } = barberSignUpDto;
 
     // Check if user already exists
@@ -107,7 +139,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email or phone already exists');
+      throw new ConflictException(
+        "User with this email or phone already exists"
+      );
     }
 
     // Hash password
@@ -121,12 +155,12 @@ export class AuthService {
       passwordHash,
       name,
       shopName,
-      role: 'barber',
+      role: "barber",
       avatarUrl: profileImage,
       isVerified: false,
       isActive: true,
       verification: {
-        status: 'pending',
+        status: "pending",
         idDocUrl: idDocument1,
         certificateUrls: [idDocument2],
         submittedAt: new Date(),
@@ -139,10 +173,10 @@ export class AuthService {
     const barber = new this.barberModel({
       userId: user._id,
       location: {
-        type: 'Point',
+        type: "Point",
         coordinates: [location.longitude, location.latitude],
       },
-      services: services.map(service => ({
+      services: services.map((service) => ({
         serviceId: service.serviceId,
         price: service.price,
       })),
@@ -157,7 +191,7 @@ export class AuthService {
 
     // Send OTP to phone using Prelude.so
     const otpResult = await this.otpService.sendOtp(phone);
-    
+
     // Update user with verification ID
     user.phoneVerificationId = otpResult.verificationId;
     user.phoneVerificationExpires = otpResult.expiresAt;
@@ -173,7 +207,7 @@ export class AuthService {
 
     return {
       ...tokens,
-      tokenType: 'Bearer',
+      tokenType: "Bearer",
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -186,8 +220,12 @@ export class AuthService {
     };
   }
 
-  async signIn(signInDto: SignInDto, deviceInfo?: any): Promise<AuthResponseDto> {
-    const { identifier, password, deviceId, deviceName, deviceType } = signInDto;
+  async signIn(
+    signInDto: SignInDto,
+    deviceInfo?: any
+  ): Promise<AuthResponseDto> {
+    const { identifier, password, deviceId, deviceName, deviceType } =
+      signInDto;
 
     // Find user by email or phone
     const user = await this.userModel.findOne({
@@ -195,18 +233,18 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     // Check if user is active
     if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
+      throw new UnauthorizedException("Account is deactivated");
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     // Update last login
@@ -223,7 +261,7 @@ export class AuthService {
 
     return {
       ...tokens,
-      tokenType: 'Bearer',
+      tokenType: "Bearer",
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -236,7 +274,9 @@ export class AuthService {
     };
   }
 
-  async refreshToken(refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
+  async refreshToken(
+    refreshTokenDto: RefreshTokenDto
+  ): Promise<AuthResponseDto> {
     const { refreshToken, deviceId } = refreshTokenDto;
 
     // Find refresh token
@@ -247,26 +287,30 @@ export class AuthService {
     });
 
     if (!tokenDoc) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException("Invalid refresh token");
     }
 
     // Get user
     const user = await this.userModel.findById(tokenDoc.userId);
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('User not found or inactive');
+      throw new UnauthorizedException("User not found or inactive");
     }
 
     // Rotate refresh token
     await this.revokeRefreshToken(tokenDoc._id.toString());
-    const newTokens = await this.generateTokens(user._id.toString(), user.role, {
-      deviceId: deviceId || tokenDoc.deviceId,
-      deviceName: tokenDoc.deviceName,
-      deviceType: tokenDoc.deviceType,
-    });
+    const newTokens = await this.generateTokens(
+      user._id.toString(),
+      user.role,
+      {
+        deviceId: deviceId || tokenDoc.deviceId,
+        deviceName: tokenDoc.deviceName,
+        deviceType: tokenDoc.deviceType,
+      }
+    );
 
     return {
       ...newTokens,
-      tokenType: 'Bearer',
+      tokenType: "Bearer",
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -296,18 +340,24 @@ export class AuthService {
     }
   }
 
-  async changePassword(userId: string, changePasswordDto: ChangePasswordDto): Promise<void> {
+  async changePassword(
+    userId: string,
+    changePasswordDto: ChangePasswordDto
+  ): Promise<void> {
     const { currentPassword, newPassword } = changePasswordDto;
 
     const user = await this.userModel.findById(userId);
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash
+    );
     if (!isCurrentPasswordValid) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new UnauthorizedException("Current password is incorrect");
     }
 
     // Hash new password
@@ -356,7 +406,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new BadRequestException("Invalid or expired reset token");
     }
 
     // Hash new password
@@ -382,17 +432,20 @@ export class AuthService {
     // Find user by phone
     const user = await this.userModel.findOne({ phone });
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException("User not found");
     }
 
     if (!user.phoneVerificationId) {
-      throw new BadRequestException('No verification session found');
+      throw new BadRequestException("No verification session found");
     }
 
     // Verify OTP code using Prelude.so
-    const isValid = await this.otpService.verifyOtp(user.phoneVerificationId, code);
+    const isValid = await this.otpService.verifyOtp(
+      user.phoneVerificationId,
+      code
+    );
     if (!isValid) {
-      throw new BadRequestException('Invalid or expired verification code');
+      throw new BadRequestException("Invalid or expired verification code");
     }
 
     // Mark user as verified
@@ -407,16 +460,16 @@ export class AuthService {
     // Find user by phone
     const user = await this.userModel.findOne({ phone });
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException("User not found");
     }
 
     if (user.isVerified) {
-      throw new BadRequestException('Phone number is already verified');
+      throw new BadRequestException("Phone number is already verified");
     }
 
     // Send new OTP using Prelude.so
     const otpResult = await this.otpService.sendOtp(phone);
-    
+
     // Update user with new verification ID
     user.phoneVerificationId = otpResult.verificationId;
     user.phoneVerificationExpires = otpResult.expiresAt;
@@ -437,125 +490,307 @@ export class AuthService {
     });
   }
 
-  async verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+  async verifyPassword(
+    password: string,
+    passwordHash: string
+  ): Promise<boolean> {
     return bcrypt.compare(password, passwordHash);
   }
 
-  async socialSignIn(socialSignInDto: SocialSignInDto, deviceInfo?: any): Promise<AuthResponseDto> {
-    // const { provider, idToken, deviceId, deviceName, deviceType } = socialSignInDto;
+  // async socialSignIn(socialSignInDto: SocialSignInDto, deviceInfo?: any): Promise<AuthResponseDto> {
+  //   const { provider, idToken, deviceId, deviceName, deviceType } = socialSignInDto;
 
-    // const isGoogleConfigured = this.configService.get<string>('GOOGLE_CLIENT_ID');
-    // const isFacebookConfigured = this.configService.get<string>('FACEBOOK_APP_ID');
-    // const isAppleConfigured = this.configService.get<string>('APPLE_CLIENT_ID');
+  //   const isGoogleConfigured = this.configService.get<string>('GOOGLE_CLIENT_ID');
+  //   const isFacebookConfigured = this.configService.get<string>('FACEBOOK_APP_ID');
+  //   const isAppleConfigured = this.configService.get<string>('APPLE_CLIENT_ID');
 
-    // let socialUserData: any;
+  //   let socialUserData: any;
 
-    // try {
-    //   switch (provider) {
-    //     case 'google':
-    //       if (!isGoogleConfigured) {
-    //         throw new BadRequestException('Google authentication is not configured');
-    //       }
-    //       const { GoogleStrategy } = await import('./strategies/google.strategy');
-    //       const googleStrategy = new GoogleStrategy(this.configService);
-    //       socialUserData = await googleStrategy.verifyIdToken(idToken);
-    //       break;
-    //     case 'facebook':
-    //       if (!isFacebookConfigured) {
-    //         throw new BadRequestException('Facebook authentication is not configured');
-    //       }
-    //       const { FacebookStrategy } = await import('./strategies/facebook.strategy');
-    //       const facebookStrategy = new FacebookStrategy(this.configService);
-    //       socialUserData = await facebookStrategy.verifyAccessToken(idToken);
-    //       break;
-    //     case 'apple':
-    //       if (!isAppleConfigured) {
-    //         throw new BadRequestException('Apple authentication is not configured');
-    //       }
-    //       const { AppleStrategy } = await import('./strategies/apple.strategy');
-    //       const appleStrategy = new AppleStrategy(this.configService);
-    //       socialUserData = await appleStrategy.verifyIdToken(idToken);
-    //       break;
-    //     default:
-    //       throw new BadRequestException('Unsupported social provider');
-    //   }
-    // } catch (error) {
-    //   throw new UnauthorizedException(`Social authentication failed: ${error.message}`);
-    // }
+  //   try {
+  //     switch (provider) {
+  //       case 'google':
+  //         if (!isGoogleConfigured) {
+  //           throw new BadRequestException('Google authentication is not configured');
+  //         }
+  //         const { GoogleStrategy } = await import('./strategies/google.strategy');
+  //         const googleStrategy = new GoogleStrategy(this.configService);
+  //         socialUserData = await googleStrategy.verifyIdToken(idToken);
+  //         break;
+  //       case 'facebook':
+  //         if (!isFacebookConfigured) {
+  //           throw new BadRequestException('Facebook authentication is not configured');
+  //         }
+  //         const { FacebookStrategy } = await import('./strategies/facebook.strategy');
+  //         const facebookStrategy = new FacebookStrategy(this.configService);
+  //         socialUserData = await facebookStrategy.verifyAccessToken(idToken);
+  //         break;
+  //       case 'apple':
+  //         if (!isAppleConfigured) {
+  //           throw new BadRequestException('Apple authentication is not configured');
+  //         }
+  //         const { AppleStrategy } = await import('./strategies/apple.strategy');
+  //         const appleStrategy = new AppleStrategy(this.configService);
+  //         socialUserData = await appleStrategy.verifyIdToken(idToken);
+  //         break;
+  //       default:
+  //         throw new BadRequestException('Unsupported social provider');
+  //     }
+  //   } catch (error) {
+  //     throw new UnauthorizedException(`Social authentication failed: ${error.message}`);
+  //   }
 
-    // // Check if user exists by social provider ID or email
-    // let user = await this.userModel.findOne({
-    //   $or: [
-    //     { 'socialAuth.providerId': socialUserData.providerId, 'socialAuth.provider': provider },
-    //     { email: socialUserData.email }
-    //   ]
-    // });
+  //   // Check if user exists by social provider ID or email
+  //   let user = await this.userModel.findOne({
+  //     $or: [
+  //       { 'socialAuth.providerId': socialUserData.providerId, 'socialAuth.provider': provider },
+  //       { email: socialUserData.email }
+  //     ]
+  //   });
 
-    // if (user) {
-    //   // Update social auth info if user exists but doesn't have social auth
-    //   if (!user.socialAuth || user.socialAuth.provider !== provider) {
-    //     user.socialAuth = {
-    //       provider: provider as 'google' | 'facebook' | 'apple',
-    //       providerId: socialUserData.providerId,
-    //       providerEmail: socialUserData.email,
-    //       providerName: socialUserData.name,
-    //       providerAvatar: socialUserData.avatarUrl,
-    //     };
-    //     await user.save();
-    //   }
-    // } else {
-    //   // Create new user
-    //   user = new this.userModel({
-    //     email: socialUserData.email,
-    //     name: socialUserData.name,
-    //     role: 'customer',
-    //     isVerified: socialUserData.emailVerified || true,
-    //     isActive: true,
-    //     socialAuth: {
-    //       provider: provider as 'google' | 'facebook' | 'apple',
-    //       providerId: socialUserData.providerId,
-    //       providerEmail: socialUserData.email,
-    //       providerName: socialUserData.name,
-    //       providerAvatar: socialUserData.avatarUrl,
-    //     },
-    //   });
-    //   await user.save();
-    // }
+  //   if (user) {
+  //     // Update social auth info if user exists but doesn't have social auth
+  //     if (!user.socialAuth || user.socialAuth.provider !== provider) {
+  //       user.socialAuth = {
+  //         provider: provider as 'google' | 'facebook' | 'apple',
+  //         providerId: socialUserData.providerId,
+  //         providerEmail: socialUserData.email,
+  //         providerName: socialUserData.name,
+  //         providerAvatar: socialUserData.avatarUrl,
+  //       };
+  //       await user.save();
+  //     }
+  //   } else {
+  //     // Create new user
+  //     user = new this.userModel({
+  //       email: socialUserData.email,
+  //       name: socialUserData.name,
+  //       role: 'customer',
+  //       isVerified: socialUserData.emailVerified || true,
+  //       isActive: true,
+  //       socialAuth: {
+  //         provider: provider as 'google' | 'facebook' | 'apple',
+  //         providerId: socialUserData.providerId,
+  //         providerEmail: socialUserData.email,
+  //         providerName: socialUserData.name,
+  //         providerAvatar: socialUserData.avatarUrl,
+  //       },
+  //     });
+  //     await user.save();
+  //   }
 
-    // // Check if user is active
-    // if (!user.isActive) {
-    //   throw new UnauthorizedException('Account is deactivated');
-    // }
+  //   // Check if user is active
+  //   if (!user.isActive) {
+  //     throw new UnauthorizedException('Account is deactivated');
+  //   }
 
-    // // Update last login
-    // user.lastLoginAt = new Date();
-    // await user.save();
+  //   // Update last login
+  //   user.lastLoginAt = new Date();
+  //   await user.save();
 
-    // // Generate tokens
-    // const tokens = await this.generateTokens(user._id.toString(), user.role, {
-    //   deviceId: deviceId || uuidv4(),
-    //   deviceName,
-    //   deviceType,
-    //   ...deviceInfo,
-    // });
+  //   // Generate tokens
+  //   const tokens = await this.generateTokens(user._id.toString(), user.role, {
+  //     deviceId: deviceId || uuidv4(),
+  //     deviceName,
+  //     deviceType,
+  //     ...deviceInfo,
+  //   });
 
-    // return {
-    //   ...tokens,
-    //   tokenType: 'Bearer',
-    //   user: {
-    //     id: user._id.toString(),
-    //     email: user.email,
-    //     phone: user.phone,
-    //     name: user.name,
-    //     role: user.role,
-    //     isVerified: user.isVerified,
-    //     avatarUrl: user.avatarUrl || user.socialAuth?.providerAvatar,
-    //   },
-    // };
-    return Promise.resolve(null);
+  //   return {
+  //     ...tokens,
+  //     tokenType: 'Bearer',
+  //     user: {
+  //       id: user._id.toString(),
+  //       email: user.email,
+  //       phone: user.phone,
+  //       name: user.name,
+  //       role: user.role,
+  //       isVerified: user.isVerified,
+  //       avatarUrl: user.avatarUrl || user.socialAuth?.providerAvatar,
+  //     },
+  //   };
+
+  // }
+
+  async socialSignIn(
+    socialSignInDto: SocialSignInDto,
+    deviceInfo?: any
+  ): Promise<AuthResponseDto> {
+    const { provider, idToken, deviceId, deviceName, deviceType } =
+      socialSignInDto;
+
+    const isGoogleConfigured =
+      this.configService.get<string>("GOOGLE_CLIENT_ID");
+    const isFacebookConfigured =
+      this.configService.get<string>("FACEBOOK_APP_ID");
+    const isAppleConfigured = this.configService.get<string>("APPLE_CLIENT_ID");
+
+    let socialUserData: any;
+    let user;
+
+    try {
+      // ✅ STEP 1: Validate provider configuration and verify token
+      try {
+        switch (provider) {
+          case "google": {
+            if (!isGoogleConfigured) {
+              throw new BadRequestException(
+                "Google authentication is not configured"
+              );
+            }
+            const { GoogleStrategy } = await import(
+              "./strategies/google.strategy"
+            );
+            const googleStrategy = new GoogleStrategy(this.configService);
+            socialUserData = await googleStrategy.verifyIdToken(idToken);
+            break;
+          }
+          case "facebook": {
+            if (!isFacebookConfigured) {
+              throw new BadRequestException(
+                "Facebook authentication is not configured"
+              );
+            }
+            const { FacebookStrategy } = await import(
+              "./strategies/facebook.strategy"
+            );
+            const facebookStrategy = new FacebookStrategy(this.configService);
+            socialUserData = await facebookStrategy.verifyAccessToken(idToken);
+            break;
+          }
+          case "apple": {
+            if (!isAppleConfigured) {
+              throw new BadRequestException(
+                "Apple authentication is not configured"
+              );
+            }
+            const { AppleStrategy } = await import(
+              "./strategies/apple.strategy"
+            );
+            const appleStrategy = new AppleStrategy(this.configService);
+            socialUserData = await appleStrategy.verifyIdToken(idToken);
+            break;
+          }
+          default:
+            throw new BadRequestException("Unsupported social provider");
+        }
+      } catch (error) {
+        // 🔴 Catch errors during social verification
+        throw new UnauthorizedException(
+          `Social authentication failed: ${error.message}`
+        );
+      }
+
+      // ✅ STEP 2: Lookup or create user
+      try {
+        user = await this.userModel.findOne({
+          $or: [
+            {
+              "socialAuth.providerId": socialUserData.providerId,
+              "socialAuth.provider": provider,
+            },
+            { email: socialUserData.email },
+          ],
+        });
+
+        if (user) {
+          // Update social data if outdated
+          if (!user.socialAuth || user.socialAuth.provider !== provider) {
+            user.socialAuth = {
+              provider: provider as "google" | "facebook" | "apple",
+              providerId: socialUserData.providerId,
+              providerEmail: socialUserData.email,
+              providerName: socialUserData.name,
+              providerAvatar: socialUserData.avatarUrl,
+            };
+            await user.save();
+          }
+        } else {
+          // Create a new user
+          user = new this.userModel({
+            email: socialUserData.email,
+            name: socialUserData.name,
+            role: "customer",
+            isVerified: socialUserData.emailVerified || true,
+            isActive: true,
+            socialAuth: {
+              provider: provider as "google" | "facebook" | "apple",
+              providerId: socialUserData.providerId,
+              providerEmail: socialUserData.email,
+              providerName: socialUserData.name,
+              providerAvatar: socialUserData.avatarUrl,
+            },
+          });
+          await user.save();
+        }
+      } catch (error) {
+        // 🔴 Catch database issues
+        throw new InternalServerErrorException(
+          `User creation or lookup failed: ${error.message}`
+        );
+      }
+
+      // ✅ STEP 3: Validate user status
+      if (!user.isActive) {
+        throw new UnauthorizedException("Account is deactivated");
+      }
+
+      // ✅ STEP 4: Update last login timestamp
+      try {
+        user.lastLoginAt = new Date();
+        await user.save();
+      } catch (error) {
+        // Log error but don’t block login if timestamp fails
+        console.warn("⚠️ Failed to update lastLoginAt:", error.message);
+      }
+
+      // ✅ STEP 5: Generate tokens
+      let tokens;
+      try {
+        tokens = await this.generateTokens(user._id.toString(), user.role, {
+          deviceId: deviceId || uuidv4(),
+          deviceName,
+          deviceType,
+          ...deviceInfo,
+        });
+      } catch (error) {
+        throw new InternalServerErrorException(
+          `Token generation failed: ${error.message}`
+        );
+      }
+
+      // ✅ STEP 6: Return final response
+      return {
+        ...tokens,
+        tokenType: "Bearer",
+        user: {
+          id: user._id.toString(),
+          email: user.email,
+          phone: user.phone,
+          name: user.name,
+          role: user.role,
+          isVerified: user.isVerified,
+          avatarUrl: user.avatarUrl || user.socialAuth?.providerAvatar,
+        },
+      };
+    } catch (error) {
+      // 🔴 Global catch block for unexpected failures
+      console.error("❌ Social Sign-in Error:", error);
+
+      if (error instanceof HttpException) {
+        throw error; // Re-throw known HTTP exceptions
+      }
+
+      throw new InternalServerErrorException(
+        "An unexpected error occurred during social sign-in"
+      );
+    }
   }
 
-  private async generateTokens(userId: string, role: string, deviceInfo?: any): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  private async generateTokens(
+    userId: string,
+    role: string,
+    deviceInfo?: any
+  ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
     const payload = { sub: userId, role };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = uuidv4();
@@ -574,12 +809,15 @@ export class AuthService {
 
     await refreshTokenDoc.save();
 
-    const expiresIn = this.configService.get<number>('jwt.expiresIn') || 900; // 15 minutes
+    const expiresIn = this.configService.get<number>("jwt.expiresIn") || 900; // 15 minutes
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: typeof expiresIn === 'string' ? this.parseExpiration(expiresIn) : expiresIn,
+      expiresIn:
+        typeof expiresIn === "string"
+          ? this.parseExpiration(expiresIn)
+          : expiresIn,
     };
   }
 
@@ -602,11 +840,16 @@ export class AuthService {
     const unit = match[2];
 
     switch (unit) {
-      case 's': return value;
-      case 'm': return value * 60;
-      case 'h': return value * 60 * 60;
-      case 'd': return value * 60 * 60 * 24;
-      default: return 900;
+      case "s":
+        return value;
+      case "m":
+        return value * 60;
+      case "h":
+        return value * 60 * 60;
+      case "d":
+        return value * 60 * 60 * 24;
+      default:
+        return 900;
     }
   }
 }
