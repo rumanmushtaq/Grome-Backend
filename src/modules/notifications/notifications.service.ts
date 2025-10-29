@@ -1,21 +1,36 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
-
-import { Notification, NotificationDocument, NotificationType, NotificationChannel, NotificationStatus } from '../../schemas/notification.schema';
-import { ChatMessage, ChatMessageDocument } from '../../schemas/chat-message.schema';
-import { User, UserDocument } from '../../schemas/user.schema';
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { InjectQueue } from "@nestjs/bull";
+import { Queue } from "bull";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import {
+  Notification,
+  NotificationDocument,
+  NotificationType,
+  NotificationChannel,
+  NotificationStatus,
+} from "../../schemas/notification.schema";
+import {
+  ChatMessage,
+  ChatMessageDocument,
+} from "../../schemas/chat-message.schema";
+import { User, UserDocument } from "../../schemas/user.schema";
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
-    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(Notification.name)
+    private notificationModel: Model<NotificationDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectQueue('notifications') private notificationsQueue: Queue,
+    @InjectQueue("notifications") private notificationsQueue: Queue
   ) {}
 
   async createNotification(data: {
@@ -40,7 +55,7 @@ export class NotificationsService {
     await notification.save();
 
     // Add to queue for processing
-    await this.notificationsQueue.add('send-notification', {
+    await this.notificationsQueue.add("send-notification", {
       notificationId: notification._id.toString(),
     });
 
@@ -55,7 +70,7 @@ export class NotificationsService {
 
       // Get sender user
       const sender = await this.userModel.findById(message.fromUserId);
-      const senderName = sender?.name || 'Unknown User';
+      const senderName = sender?.name || "Unknown User";
 
       // Check if recipient is online (you might want to check this via Socket.IO)
       // For now, we'll send push notification
@@ -64,7 +79,7 @@ export class NotificationsService {
         type: NotificationType.MESSAGE_RECEIVED,
         channel: NotificationChannel.PUSH,
         title: `New message from ${senderName}`,
-        body: message.message || 'Sent an attachment',
+        body: message.message || "Sent an attachment",
         data: {
           conversationId: message.conversationId.toString(),
           messageId: message._id.toString(),
@@ -81,7 +96,7 @@ export class NotificationsService {
           type: NotificationType.MESSAGE_RECEIVED,
           channel: NotificationChannel.EMAIL,
           title: `New message from ${senderName}`,
-          body: message.message || 'Sent an attachment',
+          body: message.message || "Sent an attachment",
           data: {
             conversationId: message.conversationId.toString(),
             messageId: message._id.toString(),
@@ -91,9 +106,8 @@ export class NotificationsService {
           fromUserId: message.fromUserId.toString(),
         });
       }
-
     } catch (error) {
-      this.logger.error('Error sending message notification:', error);
+      this.logger.error("Error sending message notification:", error);
     }
   }
 
@@ -139,10 +153,12 @@ export class NotificationsService {
   }): Promise<void> {
     const { userId, type, bookingId, amount, status } = data;
 
-    const title = status === 'completed' ? 'Payment Successful' : 'Payment Failed';
-    const body = status === 'completed' 
-      ? `Your payment of $${amount} has been processed successfully`
-      : `Your payment of $${amount} failed. Please try again.`;
+    const title =
+      status === "completed" ? "Payment Successful" : "Payment Failed";
+    const body =
+      status === "completed"
+        ? `Your payment of $${amount} has been processed successfully`
+        : `Your payment of $${amount} failed. Please try again.`;
 
     await this.createNotification({
       userId,
@@ -176,7 +192,7 @@ export class NotificationsService {
     const { userIds, type, title, body, data: additionalData } = data;
 
     // Create notifications for all users
-    const notifications = userIds.map(userId => ({
+    const notifications = userIds.map((userId) => ({
       userId,
       type,
       channel: NotificationChannel.PUSH,
@@ -189,11 +205,12 @@ export class NotificationsService {
       maxRetries: 3,
     }));
 
-    const savedNotifications = await this.notificationModel.insertMany(notifications);
+    const savedNotifications =
+      await this.notificationModel.insertMany(notifications);
 
     // Add to queue for processing
     for (const notification of savedNotifications) {
-      await this.notificationsQueue.add('send-notification', {
+      await this.notificationsQueue.add("send-notification", {
         notificationId: notification._id.toString(),
       });
     }
@@ -203,71 +220,118 @@ export class NotificationsService {
     userId: string,
     page: number = 1,
     limit: number = 20,
-    unreadOnly: boolean = false,
+    unreadOnly: boolean = false
   ): Promise<{
-    notifications: NotificationDocument[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> {
-    const skip = (page - 1) * limit;
-    const filter: any = { userId };
-
-    if (unreadOnly) {
-      filter.status = { $in: [NotificationStatus.PENDING, NotificationStatus.SENT] };
-    }
-
-    const [notifications, total] = await Promise.all([
-      this.notificationModel
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.notificationModel.countDocuments(filter),
-    ]);
-
-    return {
-      notifications,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+    message: string;
+    data: {
+      notifications: NotificationDocument[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
     };
+  }> {
+    try {
+      const skip = (page - 1) * limit;
+      const filter: any = { userId };
+
+      if (unreadOnly) {
+        filter.status = {
+          $in: [NotificationStatus.PENDING, NotificationStatus.SENT],
+        };
+      }
+
+      const [notifications, total] = await Promise.all([
+        this.notificationModel
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+        this.notificationModel.countDocuments(filter),
+      ]);
+
+      return {
+        message: "Getting all notifications successfully",
+        data: {
+          notifications,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      // ✅ Handle expected NestJS exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // ✅ Catch all unexpected errors
+      throw new InternalServerErrorException({
+        message: error.message || "Failed to add service to barber profile",
+        statusCode: 500,
+        error: true,
+      });
+    }
   }
 
   async markAsRead(notificationId: string, userId: string): Promise<void> {
     await this.notificationModel.updateOne(
       { _id: notificationId, userId },
-      { 
+      {
         status: NotificationStatus.READ,
         readAt: new Date(),
-      },
+      }
     );
   }
 
   async markAllAsRead(userId: string): Promise<void> {
     await this.notificationModel.updateMany(
-      { 
+      {
         userId,
         status: { $in: [NotificationStatus.PENDING, NotificationStatus.SENT] },
       },
-      { 
+      {
         status: NotificationStatus.READ,
         readAt: new Date(),
-      },
+      }
     );
   }
 
   async getUnreadCount(userId: string): Promise<number> {
-    return this.notificationModel.countDocuments({
-      userId,
-      status: { $in: [NotificationStatus.PENDING, NotificationStatus.SENT] },
-    });
+    try{
+
+
+      return this.notificationModel.countDocuments({
+        userId,
+        status: { $in: [NotificationStatus.PENDING, NotificationStatus.SENT] },
+      });
+    }catch (error) {
+      // ✅ Handle expected NestJS exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // ✅ Catch all unexpected errors
+      throw new InternalServerErrorException({
+        message: error.message || "Failed to add service to barber profile",
+        statusCode: 500,
+        error: true,
+      });
+    }
   }
 
-  async deleteNotification(notificationId: string, userId: string): Promise<void> {
+  async deleteNotification(
+    notificationId: string,
+    userId: string
+  ): Promise<void> {
     await this.notificationModel.deleteOne({
       _id: notificationId,
       userId,
@@ -290,9 +354,10 @@ export class NotificationsService {
   // Queue job processors
   async processNotification(job: any): Promise<void> {
     const { notificationId } = job.data;
-    
+
     try {
-      const notification = await this.notificationModel.findById(notificationId);
+      const notification =
+        await this.notificationModel.findById(notificationId);
       if (!notification) {
         this.logger.warn(`Notification ${notificationId} not found`);
         return;
@@ -318,10 +383,12 @@ export class NotificationsService {
       notification.status = NotificationStatus.SENT;
       notification.sentAt = new Date();
       await notification.save();
-
     } catch (error) {
-      this.logger.error(`Error processing notification ${notificationId}:`, error);
-      
+      this.logger.error(
+        `Error processing notification ${notificationId}:`,
+        error
+      );
+
       // Update retry count
       await this.notificationModel.findByIdAndUpdate(notificationId, {
         $inc: { retryCount: 1 },
@@ -330,7 +397,8 @@ export class NotificationsService {
       });
 
       // Check if max retries reached
-      const notification = await this.notificationModel.findById(notificationId);
+      const notification =
+        await this.notificationModel.findById(notificationId);
       if (notification.retryCount >= notification.maxRetries) {
         notification.status = NotificationStatus.FAILED;
         await notification.save();
@@ -338,31 +406,47 @@ export class NotificationsService {
         // Retry with exponential backoff
         const delay = Math.pow(2, notification.retryCount) * 1000;
         await this.notificationsQueue.add(
-          'send-notification',
+          "send-notification",
           { notificationId },
-          { delay },
+          { delay }
         );
       }
     }
   }
 
-  private async sendPushNotification(notification: NotificationDocument): Promise<void> {
+  private async sendPushNotification(
+    notification: NotificationDocument
+  ): Promise<void> {
     // TODO: Implement Firebase FCM push notification
-    this.logger.log(`Sending push notification to user ${notification.userId}: ${notification.title}`);
+    this.logger.log(
+      `Sending push notification to user ${notification.userId}: ${notification.title}`
+    );
   }
 
-  private async sendEmailNotification(notification: NotificationDocument): Promise<void> {
+  private async sendEmailNotification(
+    notification: NotificationDocument
+  ): Promise<void> {
     // TODO: Implement email sending via SMTP/SES
-    this.logger.log(`Sending email notification to user ${notification.userId}: ${notification.title}`);
+    this.logger.log(
+      `Sending email notification to user ${notification.userId}: ${notification.title}`
+    );
   }
 
-  private async sendSmsNotification(notification: NotificationDocument): Promise<void> {
+  private async sendSmsNotification(
+    notification: NotificationDocument
+  ): Promise<void> {
     // TODO: Implement SMS sending via Twilio
-    this.logger.log(`Sending SMS notification to user ${notification.userId}: ${notification.title}`);
+    this.logger.log(
+      `Sending SMS notification to user ${notification.userId}: ${notification.title}`
+    );
   }
 
-  private async sendInAppNotification(notification: NotificationDocument): Promise<void> {
+  private async sendInAppNotification(
+    notification: NotificationDocument
+  ): Promise<void> {
     // TODO: Implement in-app notification (Socket.IO)
-    this.logger.log(`Sending in-app notification to user ${notification.userId}: ${notification.title}`);
+    this.logger.log(
+      `Sending in-app notification to user ${notification.userId}: ${notification.title}`
+    );
   }
 }

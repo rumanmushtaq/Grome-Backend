@@ -168,6 +168,8 @@ export class BarbersService {
   }
 
   async getNearbyBarbers(latitude: number, longitude: number, radius: number = 10): Promise<BarberResponseDto[]> {
+    
+    console.log("radius", radius)
     const barbers = await this.barberModel.aggregate([
       {
         $geoNear: {

@@ -18,8 +18,10 @@ export class BookingsService {
   async createBooking(customerId: string, createBookingDto: CreateBookingDto): Promise<BookingResponseDto> {
     const { barberId, services, scheduledAt, type, location, specialRequests, customerNotes, promoCodeId } = createBookingDto;
 
+    console.log("barberId", barberId)
     // Validate barber exists and is active
     const barber = await this.barberModel.findById(barberId);
+    console.log("barber", barber)
     if (!barber || !barber.isActive) {
       throw new NotFoundException('Barber not found or inactive');
     }

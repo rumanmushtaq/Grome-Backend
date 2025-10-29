@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Request, ParseFloatPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 
 import { BarbersService } from './barbers.service';
@@ -55,9 +55,9 @@ export class BarbersController {
   @ApiQuery({ name: 'longitude', type: Number, description: 'Longitude' })
   @ApiQuery({ name: 'radius', type: Number, description: 'Search radius in kilometers', required: false })
   async getNearbyBarbers(
-    @Query('latitude') latitude: number,
-    @Query('longitude') longitude: number,
-    @Query('radius') radius: number = 10
+    @Query('latitude', ParseFloatPipe) latitude: number,
+    @Query('longitude', ParseFloatPipe) longitude: number,
+     @Query('radius', new DefaultValuePipe(10), ParseFloatPipe) radius: number,
   ): Promise<BarberResponseDto[]> {
     return this.barbersService.getNearbyBarbers(latitude, longitude, radius);
   }
