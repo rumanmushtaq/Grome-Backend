@@ -37,9 +37,9 @@ export class S3StorageController {
       },
     },
   })
-  @UseGuards(RolesGuard)
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(RolesGuard)
+  // @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard)
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async upload(

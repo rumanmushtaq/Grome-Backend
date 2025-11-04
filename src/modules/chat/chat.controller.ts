@@ -1,11 +1,12 @@
 import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../dto/common/pagination.dto';
 import { MessageType } from '../../schemas/chat-message.schema';
+import { CreateConversationDto } from './dtos/chat.dto';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -14,15 +15,16 @@ import { MessageType } from '../../schemas/chat-message.schema';
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  @Post('conversations')
-  @ApiOperation({ summary: 'Create a new conversation' })
-  @ApiResponse({ status: 201, description: 'Conversation created successfully' })
-  async createConversation(
-    @CurrentUser() user: any,
-    @Body() body: { barberId: string; bookingId?: string },
-  ) {
-    return this.chatService.createConversation(user.userId, body.barberId, body.bookingId);
-  }
+@Post('conversations')
+@ApiOperation({ summary: 'Create a new conversation' })
+@ApiResponse({ status: 201, description: 'Conversation created successfully' })
+@ApiBody({ type: CreateConversationDto }) // 👈 Add this line
+async createConversation(
+  @CurrentUser() user: any,
+  @Body() body: CreateConversationDto,
+) {
+  return this.chatService.createConversation(user.userId, body.barberId, body.bookingId);
+}
 
   @Get('conversations')
   @ApiOperation({ summary: 'Get user conversations' })
