@@ -1,5 +1,8 @@
+import { MessageType } from '@/schemas/chat-message.schema';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
 
 export class CreateConversationDto {
   @ApiProperty({
@@ -17,4 +20,65 @@ export class CreateConversationDto {
   @IsString()
   @IsOptional()
   bookingId?: string;
+}
+
+
+class AttachmentDto {
+  @ApiProperty({
+    description: 'File URL of the attachment',
+    example: 'https://example.com/uploads/photo.jpg',
+  })
+  @IsString()
+  @IsNotEmpty()
+  fileUrl: string;
+
+  @ApiPropertyOptional({ example: 'photo.jpg' })
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @ApiPropertyOptional({ example: 'image/jpeg' })
+  @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @ApiPropertyOptional({ example: 512000 })
+  @IsOptional()
+  size?: number;
+
+  @ApiPropertyOptional({
+    description: 'Thumbnail URL for images or videos',
+    example: 'https://example.com/uploads/thumbnails/photo_thumb.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+}
+
+export class CreateMessageDto {
+  @ApiProperty({
+    description: 'Message text content',
+    example: 'Check out this image!',
+  })
+  @IsString()
+  message: string;
+
+  @ApiPropertyOptional({
+    description: 'Type of the message',
+    enum: MessageType,
+    example: MessageType.IMAGE,
+  })
+  @IsOptional()
+  @IsEnum(MessageType)
+  type?: MessageType;
+
+  @ApiPropertyOptional({
+    description: 'List of attachments for this message',
+    type: [AttachmentDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttachmentDto)
+  attachments?: AttachmentDto[];
 }

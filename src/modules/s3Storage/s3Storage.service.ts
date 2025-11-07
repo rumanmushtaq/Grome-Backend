@@ -3,85 +3,149 @@ import {
   HttpStatus,
   Inject,
   Injectable,
-} from '@nestjs/common';
-import { S3 } from 'aws-sdk';
+} from "@nestjs/common";
+import { S3 } from "aws-sdk";
 
-import { FILE_TYPE } from './types/storageTypes';
-import { v4 as uuidv4 } from 'uuid';
-import { User } from '@/schemas/user.schema';
-import { ErrorStatus } from '../auth/enums/role.enum';
+import { FILE_TYPE } from "./types/storageTypes";
+import { v4 as uuidv4 } from "uuid";
+import { User } from "@/schemas/user.schema";
+import { ErrorStatus } from "../auth/enums/role.enum";
 
-const path = require('path');
+const path = require("path");
 const filename = path.basename(__filename);
 
 @Injectable()
 export class S3StorageService {
-  constructor(
-    @Inject('S3') private readonly S3: S3,
+  constructor(@Inject("S3") private readonly S3: S3) {}
 
+  // async uploadPublicFile(type: string, user: User, file: any) {
+  //   try {
+  //     if (!file) {
+  //       throw new BadRequestException('File not attached');
+  //     }
 
-  ) {}
+  //     let path = '';
 
-  async uploadPublicFile(type: string, user: User, file: any) {
-    try {
-      if (!file) {
-        throw new BadRequestException('File not attached');
-      }
+  //     switch (type) {
+  //       case FILE_TYPE.TERMS_CONDITIONS:
+  //         path = `${FILE_TYPE.TERMS_CONDITIONS}/${uuidv4()}`;
+  //         break;
 
-      let path = '';
+  //       case FILE_TYPE.CHAT:
+  //         path = `${FILE_TYPE.CHAT}//${uuidv4()}`;
+  //         break;
 
-      switch (type) {
-        case FILE_TYPE.TERMS_CONDITIONS:
-          path = `${FILE_TYPE.TERMS_CONDITIONS}/${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.TASK:
+  //         path = `${FILE_TYPE.TASK}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.CHAT:
-          path = `${FILE_TYPE.CHAT}//${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.USER:
+  //         path = `${FILE_TYPE.USER}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.TASK:
-          path = `${FILE_TYPE.TASK}/${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.VENDOR:
+  //         path = `${FILE_TYPE.VENDOR}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.USER:
-          path = `${FILE_TYPE.USER}/${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.SERVICE:
+  //         path = `${FILE_TYPE.SERVICE}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.VENDOR:
-          path = `${FILE_TYPE.VENDOR}/${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.KYC:
+  //         path = `${user._id}/${FILE_TYPE.KYC}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.SERVICE:
-          path = `${FILE_TYPE.SERVICE}/${uuidv4()}`;
-          break;
+  //       case FILE_TYPE.SUBSERVICE:
+  //         path = `${user._id}/${FILE_TYPE.SUBSERVICE}/${uuidv4()}`;
+  //         break;
 
-        case FILE_TYPE.KYC:
-          path = `${user._id}/${FILE_TYPE.KYC}/${uuidv4()}`;
-          break;
+  //       default:
+  //         break;
+  //     }
 
-        case FILE_TYPE.SUBSERVICE:
-          path = `${user._id}/${FILE_TYPE.SUBSERVICE}/${uuidv4()}`;
-          break;
+  //     const uploadResult = await this.S3.upload({
+  //       Bucket: process.env.AWS_BUCKET,
+  //       Body: file.buffer,
+  //       Key: path,
+  //       ContentType: file.mimetype,
+  //     }).promise();
 
-        default:
-          break;
-      }
+  //     return {
+  //       url: process.env.AWS_ACCESS_URL + '/' + uploadResult.Key,
+  //       key: uploadResult.Key,
+  //     };
+  //   } catch (error) {
+  //     throw new BadRequestException(error.message);
+  //   }
+  // }
 
-      const uploadResult = await this.S3.upload({
-        Bucket: process.env.AWS_BUCKET,
-        Body: file.buffer,
-        Key: path,
-        ContentType: file.mimetype,
-      }).promise();
-
-      return {
-        url: process.env.AWS_ACCESS_URL + '/' + uploadResult.Key,
-        key: uploadResult.Key,
-      };
-    } catch (error) {
-      throw new BadRequestException(error.message);
+async uploadPublicFile(type: string, user: any, file: Express.Multer.File) {
+  try {
+    if (!file) {
+      throw new BadRequestException('File not attached');
     }
+
+    // 🧩 Normalize the type value to lowercase to handle CHAT, Chat, chat, etc.
+    const normalizedType = type.toLowerCase();
+
+    let path = '';
+
+    switch (normalizedType) {
+      case FILE_TYPE.TERMS_CONDITIONS:
+        path = `${FILE_TYPE.TERMS_CONDITIONS}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.CHAT:
+        path = `${FILE_TYPE.CHAT}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.TASK:
+        path = `${FILE_TYPE.TASK}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.USER:
+        path = `${FILE_TYPE.USER}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.VENDOR:
+        path = `${FILE_TYPE.VENDOR}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.SERVICE:
+        path = `${FILE_TYPE.SERVICE}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.KYC:
+        path = `${user._id}/${FILE_TYPE.KYC}/${uuidv4()}`;
+        break;
+
+      case FILE_TYPE.SUBSERVICE:
+        path = `${user._id}/${FILE_TYPE.SUBSERVICE}/${uuidv4()}`;
+        break;
+
+      default:
+        throw new BadRequestException(`Invalid file type: ${type}`);
+    }
+
+    const uploadResult = await this.S3.upload({
+      Bucket: process.env.AWS_BUCKET,
+      Body: file.buffer,
+      Key: path,
+      ContentType: file.mimetype,
+    }).promise();
+
+    return {
+      url: `${process.env.AWS_ACCESS_URL}/${uploadResult.Key}`,
+      key: uploadResult.Key,
+      bucket: process.env.AWS_BUCKET,
+      contentType: file.mimetype,
+      size: file.size,
+    };
+  } catch (error) {
+    throw new BadRequestException(error.message || 'File upload failed');
   }
+}
+
 
   async deleteImageFormS3(key: string) {
     const params: AWS.S3.DeleteObjectRequest = {

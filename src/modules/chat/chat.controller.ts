@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../dto/common/pagination.dto';
 import { MessageType } from '../../schemas/chat-message.schema';
-import { CreateConversationDto } from './dtos/chat.dto';
+import { CreateConversationDto, CreateMessageDto } from './dtos/chat.dto';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -66,11 +66,7 @@ async createConversation(
   async sendMessage(
     @Param('id') id: string,
     @CurrentUser() user: any,
-    @Body() body: {
-      message: string;
-      type?: string;
-      attachments?: any[];
-    },
+    @Body() body: CreateMessageDto
   ) {
     return this.chatService.createMessage({
       conversationId: id,
