@@ -22,6 +22,7 @@ import { RefreshToken, RefreshTokenSchema } from '../../schemas/refresh-token.sc
 
 // DTOs
 import { AuthResponseDto } from '../../dto/auth/auth.dto';
+import { ThreadEntity, ThreadSchema } from '@/schemas/thread.schema';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AuthResponseDto } from '../../dto/auth/auth.dto';
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Barber.name, schema: BarberSchema },
+      { name: ThreadEntity.name, schema: ThreadSchema },
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),
   ],

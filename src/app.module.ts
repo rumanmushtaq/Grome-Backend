@@ -21,6 +21,8 @@ import { MediaModule } from './modules/media/media.module';
 import { SearchModule } from './modules/search/search.module';
 import { PromoCodesModule } from './modules/promo-codes/promo-codes.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { S3StorageModule } from './modules/s3Storage/s3Storage.module';
+import { ThreadModule } from './modules/thread/thread.module';
 
 // Shared modules
 import { DatabaseModule } from './config/database.module';
@@ -31,7 +33,6 @@ import { JobsModule } from './jobs/jobs.module';
 // Configuration
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
-import { S3StorageModule } from './modules/s3Storage/s3Storage.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { S3StorageModule } from './modules/s3Storage/s3Storage.module';
     SearchModule,
     PromoCodesModule,
     ReportsModule,
+    ThreadModule
   ],
 })
 export class AppModule {}

@@ -54,6 +54,7 @@ async function bootstrap() {
     .addTag('chat', 'Real-time chat')
     .addTag('notifications', 'Notification system')
     .addTag('admin', 'Admin operations')
+    .addTag('threads', 'Thread operations')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
