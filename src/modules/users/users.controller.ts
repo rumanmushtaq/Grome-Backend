@@ -1,36 +1,67 @@
-import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from "@nestjs/swagger";
 
-import { UsersService } from './users.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UpdateProfileDto, UpdatePreferencesDto, BarberVerificationDto, UserResponseDto } from '../../dto/users/user.dto';
-import { PaginationDto } from '../../dto/common/pagination.dto';
-import { UserRole } from '../../schemas/user.schema';
+import { UsersService } from "./users.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
+import {
+  UpdateProfileDto,
+  UpdatePreferencesDto,
+  BarberVerificationDto,
+  UserResponseDto,
+} from "../../dto/users/user.dto";
+import { PaginationDto } from "../../dto/common/pagination.dto";
+import { UserRole } from "../../schemas/user.schema";
 
-@ApiTags('users')
-@Controller('users')
+@ApiTags("users")
+@Controller("users")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get('profile')
-  @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'User profile retrieved successfully', type: UserResponseDto })
+  @Get("profile")
+  @ApiOperation({ summary: "Get current user profile" })
+  @ApiResponse({
+    status: 200,
+    description: "User profile retrieved successfully",
+    type: UserResponseDto,
+  })
   async getProfile(@CurrentUser() user: any): Promise<UserResponseDto> {
     const userDoc = await this.usersService.findById(user.userId);
     if (!userDoc) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
     return this.usersService.mapToResponseDto(userDoc);
   }
 
-  @Put('profile')
-  @ApiOperation({ summary: 'Update user profile' })
-  @ApiResponse({ status: 200, description: 'Profile updated successfully', type: UserResponseDto })
+  @Put("profile")
+  @ApiOperation({ summary: "Update user profile" })
+  @ApiResponse({
+    status: 200,
+    description: "Profile updated successfully",
+    type: UserResponseDto,
+  })
   async updateProfile(
     @CurrentUser() user: any,
     @Body() updateProfileDto: UpdateProfileDto
@@ -38,82 +69,123 @@ export class UsersController {
     return this.usersService.updateProfile(user.userId, updateProfileDto);
   }
 
-  @Put('preferences')
-  @ApiOperation({ summary: 'Update user preferences' })
-  @ApiResponse({ status: 200, description: 'Preferences updated successfully', type: UserResponseDto })
+  @Put("preferences")
+  @ApiOperation({ summary: "Update user preferences" })
+  @ApiResponse({
+    status: 200,
+    description: "Preferences updated successfully",
+    type: UserResponseDto,
+  })
   async updatePreferences(
     @CurrentUser() user: any,
     @Body() updatePreferencesDto: UpdatePreferencesDto
   ): Promise<UserResponseDto> {
-    return this.usersService.updatePreferences(user.userId, updatePreferencesDto);
+    return this.usersService.updatePreferences(
+      user.userId,
+      updatePreferencesDto
+    );
   }
 
-  @Post('barber/verification')
+  @Post("barber/verification")
   @Roles(UserRole.BARBER)
-  @ApiOperation({ summary: 'Submit barber verification documents' })
-  @ApiResponse({ status: 200, description: 'Verification documents submitted successfully', type: UserResponseDto })
+  @ApiOperation({ summary: "Submit barber verification documents" })
+  @ApiResponse({
+    status: 200,
+    description: "Verification documents submitted successfully",
+    type: UserResponseDto,
+  })
   async submitBarberVerification(
     @CurrentUser() user: any,
     @Body() verificationDto: BarberVerificationDto
   ): Promise<UserResponseDto> {
-    return this.usersService.submitBarberVerification(user.userId, verificationDto);
+    return this.usersService.submitBarberVerification(
+      user.userId,
+      verificationDto
+    );
   }
 
   @Get()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get all users (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'role', required: false, enum: UserRole })
+  @ApiOperation({ summary: "Get all users (Admin only)" })
+  @ApiResponse({ status: 200, description: "Users retrieved successfully" })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "sortBy", required: false, type: String })
+  @ApiQuery({ name: "sortOrder", required: false, enum: ["asc", "desc"] })
+  @ApiQuery({ name: "role", required: false, enum: UserRole })
   async getAllUsers(
     @Query() paginationDto: PaginationDto,
-    @Query('role') role?: UserRole
+    @Query("role") role?: UserRole,
   ) {
-    return this.usersService.getAllUsers(paginationDto.page, paginationDto.limit, role);
+    console.log("Fetching users with role:", role);
+    return this.usersService.getAllUsers(
+      paginationDto.page,
+      paginationDto.limit,
+      role
+    );
   }
 
-  @Get(':id')
+  @Get(":id")
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get user by ID (Admin only)' })
-  @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'User retrieved successfully', type: UserResponseDto })
-  async getUserById(@Param('id') id: string): Promise<UserResponseDto> {
+  @ApiOperation({ summary: "Get user by ID (Admin only)" })
+  @ApiParam({ name: "id", description: "User ID" })
+  @ApiResponse({
+    status: 200,
+    description: "User retrieved successfully",
+    type: UserResponseDto,
+  })
+  async getUserById(@Param("id") id: string): Promise<UserResponseDto> {
     const user = await this.usersService.findById(id);
     if (!user) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
     return this.usersService.mapToResponseDto(user);
   }
 
-  @Patch(':id/verification')
+  @Patch(":id/verification")
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update barber verification status (Admin only)' })
-  @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'Verification status updated successfully', type: UserResponseDto })
+  @ApiOperation({ summary: "Update barber verification status (Admin only)" })
+  @ApiParam({ name: "id", description: "User ID" })
+  @ApiResponse({
+    status: 200,
+    description: "Verification status updated successfully",
+    type: UserResponseDto,
+  })
   async updateBarberVerification(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() verificationDto: { status: string; notes?: string },
     @CurrentUser() admin: any
   ): Promise<UserResponseDto> {
-    return this.usersService.updateBarberVerification(id, verificationDto, admin.userId);
+    return this.usersService.updateBarberVerification(
+      id,
+      verificationDto,
+      admin.userId
+    );
   }
 
-  @Patch(':id/deactivate')
+  @Patch(":id/deactivate")
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Deactivate user (Admin only)' })
-  @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'User deactivated successfully', type: UserResponseDto })
-  async deactivateUser(@Param('id') id: string): Promise<UserResponseDto> {
+  @ApiOperation({ summary: "Deactivate user (Admin only)" })
+  @ApiParam({ name: "id", description: "User ID" })
+  @ApiResponse({
+    status: 200,
+    description: "User deactivated successfully",
+    type: UserResponseDto,
+  })
+  async deactivateUser(@Param("id") id: string): Promise<UserResponseDto> {
     return this.usersService.deactivateUser(id);
   }
 
-  @Patch(':id/activate')
+  @Patch(":id/activate")
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Activate user (Admin only)' })
-  @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'User activated successfully', type: UserResponseDto })
-  async activateUser(@Param('id') id: string): Promise<UserResponseDto> {
+  @ApiOperation({ summary: "Activate user (Admin only)" })
+  @ApiParam({ name: "id", description: "User ID" })
+  @ApiResponse({
+    status: 200,
+    description: "User activated successfully",
+    type: UserResponseDto,
+  })
+  async activateUser(@Param("id") id: string): Promise<UserResponseDto> {
     return this.usersService.activateUser(id);
   }
 }
