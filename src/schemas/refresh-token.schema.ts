@@ -64,4 +64,3 @@ export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);
 RefreshTokenSchema.index({ userId: 1, isRevoked: 1 });
 RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 RefreshTokenSchema.index({ deviceId: 1, userId: 1 });
-RefreshTokenSchema.index({ tokenHash: 1 }, { unique: true });

@@ -19,10 +19,10 @@ export enum VerificationStatus {
 export class User {
   _id?: any;
 
-  @Prop({ type: String, unique: true, sparse: true, index: true })
+  @Prop({ type: String, sparse: true})
   email?: string;
 
-  @Prop({ type: String, unique: true, sparse: true, index: true })
+  @Prop({ type: String, sparse: true })
   phone?: string;
 
   @Prop({ required: false })
@@ -150,8 +150,4 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Indexes
-UserSchema.index({ email: 1 });
-UserSchema.index({ phone: 1 });
-UserSchema.index({ role: 1 });
-UserSchema.index({ isActive: 1 });
-UserSchema.index({ 'verification.status': 1 });
+
