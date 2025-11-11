@@ -210,7 +210,7 @@ export const BarberSchema = SchemaFactory.createForClass(Barber);
 
 // 2dsphere index for geospatial queries
 BarberSchema.index({ location: '2dsphere' });
-BarberSchema.index({ userId: 1 });
+
 BarberSchema.index({ isActive: 1 });
 BarberSchema.index({ isOnline: 1 });
 BarberSchema.index({ rating: -1 });

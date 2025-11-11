@@ -117,7 +117,7 @@ export class Wallet {
 export const WalletSchema = SchemaFactory.createForClass(Wallet);
 
 // Indexes
-WalletSchema.index({ userId: 1 }, { unique: true });
+// WalletSchema.index({ userId: 1 }, { unique: true });
 WalletSchema.index({ isActive: 1 });
 WalletSchema.index({ balance: -1 });
 WalletSchema.index({ totalEarned: -1 });

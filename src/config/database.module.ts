@@ -3,7 +3,6 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { Barber, BarberSchema } from "@/schemas/barber.schema";
 import { User, UserSchema } from "@/schemas/user.schema";
-import { ThreadEntity, ThreadSchema } from "@/schemas/thread.schema";
 import { Booking, BookingSchema } from "@/schemas/booking.schema";
 import {
   Conversation,
@@ -30,7 +29,6 @@ import { ChatMessage, ChatMessageSchema } from "@/schemas/chat-message.schema";
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Barber.name, schema: BarberSchema },
-      { name: ThreadEntity.name, schema: ThreadSchema },
       { name: Booking.name, schema: BookingSchema },
       { name: Conversation.name, schema: ConversationSchema },
       { name: ChatMessage.name, schema: ChatMessageSchema },
