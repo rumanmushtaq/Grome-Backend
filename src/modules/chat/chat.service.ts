@@ -374,6 +374,8 @@ export class ChatService {
         "name avatarUrl"
       );
 
+      
+
       return populatedMessage;
     } catch (error) {
       // ✅ Log error (replace console.error with Nest Logger if preferred)
