@@ -268,6 +268,7 @@ export class BarbersService {
       availability: barber.availability,
       experienceYears: barber.experienceYears,
       images: barber.images,
+      description :  barber.description,
       bio: barber.bio,
       specialties: barber.specialties,
       isActive: barber.isActive,

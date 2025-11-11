@@ -155,6 +155,9 @@ export class Barber {
   @Prop({ min: 0 })
   experienceYears?: number;
 
+  @Prop()
+  description: string;
+
   @Prop([String])
   images: string[];
 

@@ -323,6 +323,9 @@ export class BarberResponseDto {
   @ApiPropertyOptional({ description: 'Bio description' })
   bio?: string;
 
+  @ApiPropertyOptional({ description: 'Bio description' })
+  description?: string;
+
   @ApiPropertyOptional({ description: 'Specialties' })
   specialties?: string[];
 
