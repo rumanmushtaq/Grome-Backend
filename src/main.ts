@@ -1,70 +1,141 @@
+// import { NestFactory } from '@nestjs/core';
+// import { ValidationPipe } from '@nestjs/common';
+// import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+// import { ConfigService } from '@nestjs/config';
+// import helmet from 'helmet';
+// import compression from 'compression';
+// import cors from 'cors';
+// import { AppModule } from './app.module';
+// import { Logger } from '@nestjs/common';
+// import { SocketIOAdapter } from './config/socket-io.adapter';
+
+// async function bootstrap() {
+//   const app = await NestFactory.create(AppModule);
+//   const configService = app.get(ConfigService);
+//   const logger = new Logger('Bootstrap');
+
+//   // Security middleware
+//   app.use(helmet());
+//   app.use(compression());
+//   app.use(cors({
+//     origin: configService.get('CORS_ORIGIN')?.split(',') || ['http://localhost:3000'],
+//     credentials: true,
+//   }));
+
+//   // Global validation pipe
+//   app.useGlobalPipes(new ValidationPipe({
+//     whitelist: true,
+//     forbidNonWhitelisted: false,
+//     transform: true,
+//     transformOptions: {
+//       enableImplicitConversion: true,
+//     },
+//   }));
+
+//   // Global prefix
+//   app.setGlobalPrefix('api/v1');
+
+//   // Socket.IO adapter for Redis
+//   const socketIOAdapter = new SocketIOAdapter(configService);
+//   await socketIOAdapter.connectToRedis();
+//   app.useWebSocketAdapter(socketIOAdapter);
+
+//   // Swagger documentation
+//   const config = new DocumentBuilder()
+//     .setTitle('Grome API')
+//     .setDescription('Grome Barbershop Booking Platform API')
+//     .setVersion('1.0')
+//     .addBearerAuth()
+//     .addTag('auth', 'Authentication endpoints')
+//     .addTag('users', 'User management')
+//     .addTag('barbers', 'Barber management')
+//     .addTag('bookings', 'Booking management')
+//     .addTag('payments', 'Payment processing')
+//     .addTag('chat', 'Real-time chat')
+//     .addTag('notifications', 'Notification system')
+//     .addTag('admin', 'Admin operations')
+//     .addTag('threads', 'Thread operations')
+//     .build();
+
+//   const document = SwaggerModule.createDocument(app, config);
+//   SwaggerModule.setup('api/docs', app, document);
+
+//   const port = configService.get('PORT') || 3000;
+//   await app.listen(port);
+  
+//   logger.log(`🚀 Application is running on: http://localhost:${port}`);
+//   logger.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+// }
+
+// bootstrap();
+
+
+
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
 import { SocketIOAdapter } from './config/socket-io.adapter';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
-  const logger = new Logger('Bootstrap');
+let cachedServer: any;
 
-  // Security middleware
-  app.use(helmet());
-  app.use(compression());
-  app.use(cors({
-    origin: configService.get('CORS_ORIGIN')?.split(',') || ['http://localhost:3000'],
-    credentials: true,
-  }));
+export default async function handler(req: any, res: any) {
+  if (!cachedServer) {
+    const app = await NestFactory.create(AppModule);
+    const configService = app.get(ConfigService);
+    const logger = new Logger('Bootstrap');
 
-  // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: false,
-    transform: true,
-    transformOptions: {
-      enableImplicitConversion: true,
-    },
-  }));
+    // Security middleware
+    app.use(helmet());
+    app.use(compression());
+    app.use(
+      cors({
+        origin:
+          configService.get('CORS_ORIGIN')?.split(',') || [
+            'http://localhost:3000',
+          ],
+        credentials: true,
+      }),
+    );
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+    // Validation
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: false,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
 
-  // Socket.IO adapter for Redis
-  const socketIOAdapter = new SocketIOAdapter(configService);
-  await socketIOAdapter.connectToRedis();
-  app.useWebSocketAdapter(socketIOAdapter);
+    // Global prefix
+    app.setGlobalPrefix('api/v1');
 
-  // Swagger documentation
-  const config = new DocumentBuilder()
-    .setTitle('Grome API')
-    .setDescription('Grome Barbershop Booking Platform API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('users', 'User management')
-    .addTag('barbers', 'Barber management')
-    .addTag('bookings', 'Booking management')
-    .addTag('payments', 'Payment processing')
-    .addTag('chat', 'Real-time chat')
-    .addTag('notifications', 'Notification system')
-    .addTag('admin', 'Admin operations')
-    .addTag('threads', 'Thread operations')
-    .build();
+    // Socket.IO adapter
+    const socketIOAdapter = new SocketIOAdapter(configService);
+    await socketIOAdapter.connectToRedis();
+    app.useWebSocketAdapter(socketIOAdapter);
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+    // Swagger
+    const config = new DocumentBuilder()
+      .setTitle('Grome API')
+      .setDescription('Grome Barbershop Booking Platform API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
 
-  const port = configService.get('PORT') || 3000;
-  await app.listen(port);
-  
-  logger.log(`🚀 Application is running on: http://localhost:${port}`);
-  logger.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+
+    await app.init();
+
+    const expressApp = app.getHttpAdapter().getInstance();
+    cachedServer = expressApp;
+  }
+
+  return cachedServer(req, res);
 }
-
-bootstrap();
