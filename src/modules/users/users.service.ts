@@ -1,15 +1,27 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
 
-import { User, UserDocument, VerificationStatus } from '../../schemas/user.schema';
-import { UpdateProfileDto, UpdatePreferencesDto, BarberVerificationDto, UserResponseDto } from '../../dto/users/user.dto';
+import {
+  User,
+  UserDocument,
+  VerificationStatus,
+} from "../../schemas/user.schema";
+import {
+  UpdateProfileDto,
+  UpdatePreferencesDto,
+  BarberVerificationDto,
+  UserResponseDto,
+} from "../../dto/users/user.dto";
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
   async findById(userId: string): Promise<UserDocument | null> {
     return this.userModel.findById(userId).exec();
@@ -23,42 +35,53 @@ export class UsersService {
     return this.userModel.findOne({ phone }).exec();
   }
 
-  async updateProfile(userId: string, updateProfileDto: UpdateProfileDto): Promise<UserResponseDto> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateProfileDto },
-      { new: true }
-    ).exec();
+  async updateProfile(
+    userId: string,
+    updateProfileDto: UpdateProfileDto
+  ): Promise<UserResponseDto> {
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { $set: updateProfileDto }, { new: true })
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return this.mapToResponseDto(user);
   }
 
-  async updatePreferences(userId: string, updatePreferencesDto: UpdatePreferencesDto): Promise<UserResponseDto> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: { preferences: updatePreferencesDto } },
-      { new: true }
-    ).exec();
+  async updatePreferences(
+    userId: string,
+    updatePreferencesDto: UpdatePreferencesDto
+  ): Promise<UserResponseDto> {
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $set: { preferences: updatePreferencesDto } },
+        { new: true }
+      )
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return this.mapToResponseDto(user);
   }
 
-  async submitBarberVerification(userId: string, verificationDto: BarberVerificationDto): Promise<UserResponseDto> {
+  async submitBarberVerification(
+    userId: string,
+    verificationDto: BarberVerificationDto
+  ): Promise<UserResponseDto> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    if (user.role !== 'barber') {
-      throw new ForbiddenException('Only barbers can submit verification documents');
+    if (user.role !== "barber") {
+      throw new ForbiddenException(
+        "Only barbers can submit verification documents"
+      );
     }
 
     user.verification = {
@@ -79,27 +102,33 @@ export class UsersService {
     verificationDto: { status: string; notes?: string },
     adminId: string
   ): Promise<UserResponseDto> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          'verification.status': verificationDto.status,
-          'verification.notes': verificationDto.notes,
-          'verification.reviewedAt': new Date(),
-          'verification.reviewedBy': adminId,
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            "verification.status": verificationDto.status,
+            "verification.notes": verificationDto.notes,
+            "verification.reviewedAt": new Date(),
+            "verification.reviewedBy": adminId,
+          },
         },
-      },
-      { new: true }
-    ).exec();
+        { new: true }
+      )
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return this.mapToResponseDto(user);
   }
 
-  async getAllUsers(page: number = 1, limit: number = 10, role?: string): Promise<{
+  async getAllUsers(
+    page: number = 1,
+    limit: number = 10,
+    role?: string
+  ): Promise<{
     users: UserResponseDto[];
     total: number;
     page: number;
@@ -115,7 +144,7 @@ export class UsersService {
     ]);
 
     return {
-      users: users.map(user => this.mapToResponseDto(user)),
+      users: users.map((user) => this.mapToResponseDto(user)),
       total,
       page,
       limit,
@@ -124,50 +153,73 @@ export class UsersService {
   }
 
   async deactivateUser(userId: string): Promise<UserResponseDto> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      { isActive: false },
-      { new: true }
-    ).exec();
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { isActive: false }, { new: true })
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return this.mapToResponseDto(user);
   }
 
   async activateUser(userId: string): Promise<UserResponseDto> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      { isActive: true },
-      { new: true }
-    ).exec();
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { isActive: true }, { new: true })
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
+    }
+
+    return this.mapToResponseDto(user);
+  }
+
+
+    async toggleVerification(userId: string , isVerified : boolean): Promise<UserResponseDto> {
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { isVerified: isVerified }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException("User not found");
     }
 
     return this.mapToResponseDto(user);
   }
 
   mapToResponseDto(user: UserDocument): UserResponseDto {
-    return {
-      id: user._id.toString(),
-      email: user.email,
-      phone: user.phone,
-      name: user.name,
-      role: user.role,
-      isVerified: user.isVerified,
-      isActive: user.isActive,
-      avatarUrl: user.avatarUrl,
-      lastLoginAt: user.lastLoginAt,
-      emailVerifiedAt: user.emailVerifiedAt,
-      phoneVerifiedAt: user.phoneVerifiedAt,
-      preferences: user.preferences,
-      verification: user.verification,
-      createdAt: (user as any).createdAt,
-      updatedAt: (user as any).updatedAt,
-    };
+    try {
+      if (!user) {
+        throw new Error("User document is null or undefined");
+      }
+
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+        isVerified: user.isVerified,
+        isActive: user.isActive,
+        avatarUrl: user.avatarUrl,
+        lastLoginAt: user.lastLoginAt,
+        emailVerifiedAt: user.emailVerifiedAt,
+        phoneVerifiedAt: user.phoneVerifiedAt,
+        preferences: user.preferences,
+        verification: user.verification,
+        createdAt: (user as any).createdAt,
+        updatedAt: (user as any).updatedAt,
+      };
+    } catch (error) {
+      // Log the error for debugging
+      console.error("Error mapping user to response DTO:", error);
+
+      // Throw a proper NestJS exception
+      throw new InternalServerErrorException(
+        "Failed to map user data. Please try again later."
+      );
+    }
   }
 }

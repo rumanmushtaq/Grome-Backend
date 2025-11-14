@@ -9,6 +9,7 @@ import { isValidObjectId, Model } from "mongoose";
 
 import { Service, ServiceDocument } from "../../schemas/service.schema";
 import { PaginationDto } from "@/dto/common/pagination.dto";
+import { getEnabledCategories } from "trace_events";
 
 @Injectable()
 export class ServicesService {
@@ -17,7 +18,7 @@ export class ServicesService {
   ) {}
 
   // TODO: Implement service management methods
-  async findAll(query: PaginationDto) {
+  async findAll(query: PaginationDto, active?: boolean) {
     try {
       const {
         page = 1,
@@ -30,7 +31,9 @@ export class ServicesService {
       const sortDirection = sortOrder === "asc" ? 1 : -1;
 
       // Filter only active services
-      const filter = { isActive: true };
+      const filter: any = {
+        ...(active !== undefined ? { isActive: active } : {}),
+      };
 
       // Count total active items
       const totalItems = await this.serviceModel.countDocuments(filter);
@@ -47,7 +50,7 @@ export class ServicesService {
       const totalPages = Math.ceil(totalItems / limit);
 
       return {
-        message: "Active services retrieved successfully",
+        message: "All services retrieved successfully",
         meta: {
           totalItems,
           totalPages,
@@ -82,6 +85,35 @@ export class ServicesService {
       return {
         message: "Service retrieved successfully",
         data: service,
+      };
+    } catch (error) {
+      // ✅ Handle known errors gracefully
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      // ✅ Catch unexpected errors
+      throw new InternalServerErrorException("Failed to fetch service");
+    }
+  }
+
+  async getCategories() {
+    try {
+      const categories = await this.serviceModel.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]);
+
+      return {
+        message: "Service categories with counts retrieved successfully",
+        data: categories.map((cat) => ({
+          category: cat._id,
+          count: cat.count,
+        })),
       };
     } catch (error) {
       // ✅ Handle known errors gracefully
