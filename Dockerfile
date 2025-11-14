@@ -1,41 +1,22 @@
-# -----------------------------
-# 1) BUILDER
-# -----------------------------
-FROM node:18-alpine AS builder
-
-# Install build tools for native modules
-RUN apk add --no-cache python3 make g++
+FROM node:16-alpine as builder
 
 WORKDIR /app
-
-# Copy package files first (for caching)
-COPY package.json yarn.lock ./
-
+COPY package.json .
 # Install dependencies
 RUN yarn install --frozen-lockfile
-
-# Copy source
 COPY . .
+RUN yarn run build
 
-# Build NestJS app
-RUN yarn build
-
-# -----------------------------
-# 2) FINAL IMAGE
-# -----------------------------
-FROM node:18-alpine
+FROM node:16-alpine
 
 WORKDIR /grome-backend
 
-# Copy package.json and node_modules for production
-COPY package.json yarn.lock ./
-RUN yarn install --production --frozen-lockfile
-
-# Copy built app
-COPY --from=builder /app/dist ./dist
-
-# Copy env file (use secrets in production)
-COPY .env.stage.prod ./
-
+COPY package.json /grome-backend/
+COPY tsconfig.json /grome-backend/
+COPY --from=builder /app/node_modules /grome-backend//node_modules
+COPY --from=builder /app/dist /grome-backend/dist
+COPY .env.stage.prod /grome-backend/
 EXPOSE 8082
-CMD ["node", "dist/main.js"]
+CMD ["yarn", "start:prod"]
+
+e", "dist/main.js"]
