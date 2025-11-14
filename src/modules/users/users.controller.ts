@@ -115,7 +115,7 @@ export class UsersController {
   @ApiQuery({ name: "role", required: false, enum: UserRole })
   async getAllUsers(
     @Query() paginationDto: PaginationDto,
-    @Query("role") role?: UserRole,
+    @Query("role") role?: UserRole
   ) {
     console.log("Fetching users with role:", role);
     return this.usersService.getAllUsers(
@@ -187,5 +187,22 @@ export class UsersController {
   })
   async activateUser(@Param("id") id: string): Promise<UserResponseDto> {
     return this.usersService.activateUser(id);
+  }
+
+  @Patch(":id/toggle-verification")
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "Verified User (Admin only)" })
+  @ApiParam({ name: "id", description: "User ID" })
+  @ApiQuery({ name: "isVerified", required: true, type: Boolean })
+  @ApiResponse({
+    status: 200,
+    description: "User activated successfully",
+    type: UserResponseDto,
+  })
+  async toggleVerification(
+    @Param("id") id: string,
+    @Query("isVerified") isVerified: boolean
+  ): Promise<UserResponseDto> {
+    return this.usersService.toggleVerification(id, isVerified);
   }
 }
