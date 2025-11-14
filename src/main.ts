@@ -8,6 +8,7 @@ import * as cors from 'cors';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { SocketIOAdapter } from './config/socket-io.adapter';
+import { Express } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
