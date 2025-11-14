@@ -1,7 +1,7 @@
 # -----------------------------
 # 1) BUILDER
 # -----------------------------
-FROM node:16-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Install build tools
 RUN apk add --no-cache python3 make g++ bash git
@@ -23,7 +23,7 @@ RUN yarn build
 # -----------------------------
 # 2) FINAL IMAGE
 # -----------------------------
-FROM node:16-alpine
+FROM node:20-alpine
 
 WORKDIR /grome-backend
 
