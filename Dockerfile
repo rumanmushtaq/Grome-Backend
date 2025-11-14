@@ -1,11 +1,17 @@
 FROM node:16-alpine as builder
 
 WORKDIR /app
-COPY package.json .
+# Copy package files first (for caching)
+COPY package.json yarn.lock ./
+
 # Install dependencies
 RUN yarn install --frozen-lockfile
+
+# Copy source
 COPY . .
-RUN yarn run build
+
+# Build NestJS app
+RUN yarn build
 
 FROM node:16-alpine
 
