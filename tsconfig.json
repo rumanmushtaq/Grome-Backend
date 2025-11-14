@@ -24,6 +24,7 @@
       "@/config/*": ["src/config/*"],
       "@/schemas/*": ["src/schemas/*"],
       "@/dto/*": ["src/dto/*"]
-    }
+    },
+    "types": ["node", "glob"]
   }
 }
