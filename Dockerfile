@@ -11,7 +11,7 @@ FROM node:16-alpine
 WORKDIR /grome-backend
 
 COPY package.json /grome-backend/
-COPY tsconfig.build.json tsconfig.json  /grome-backend/
+COPY tsconfig.json /grome-backend/
 COPY --from=builder /app/node_modules /grome-backend//node_modules
 COPY --from=builder /app/dist /grome-backend/dist
 COPY .env.stage.prod /grome-backend/
