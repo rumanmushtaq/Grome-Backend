@@ -18,5 +18,3 @@ COPY --from=builder /app/dist /grome-backend/dist
 COPY .env.stage.prod /grome-backend/
 EXPOSE 8082
 CMD ["yarn", "start:prod"]
-
-e", "dist/main.js"]
