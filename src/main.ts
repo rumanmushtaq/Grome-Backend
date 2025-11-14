@@ -36,10 +36,17 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api/v1');
 
-  // Socket.IO adapter for Redis
-  const socketIOAdapter = new SocketIOAdapter(configService);
-  await socketIOAdapter.connectToRedis();
-  app.useWebSocketAdapter(socketIOAdapter);
+  // Socket.IO adapter for Redis (skip in serverless environments)
+  // WebSockets don't work well with serverless functions
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    try {
+      const socketIOAdapter = new SocketIOAdapter(configService);
+      await socketIOAdapter.connectToRedis();
+      app.useWebSocketAdapter(socketIOAdapter);
+    } catch (error) {
+      logger.warn('Socket.IO adapter initialization failed, continuing without WebSocket support');
+    }
+  }
 
   // Swagger documentation
   const config = new DocumentBuilder()
