@@ -14,6 +14,8 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
+  
+
   // Security middleware
   app.use(helmet());
   app.use(compression());
