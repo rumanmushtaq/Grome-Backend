@@ -4,7 +4,6 @@ import Redis from 'ioredis';
 
 @Global()
 @Module({
-  imports: [ConfigModule],
   providers: [
     {
       provide: 'REDIS_CLIENT',
@@ -14,7 +13,8 @@ import Redis from 'ioredis';
           port: configService.get('redis.port'),
           password: configService.get('redis.password'),
           db: configService.get('redis.db'),
-          enableReadyCheck: false,
+          enableReadyCheck: true,
+          lazyConnect: true,
           maxRetriesPerRequest: null,
         });
       },

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document, Types } from "mongoose";
+import mongoose, { Document, Types } from "mongoose";
 
 export type ServiceDocument = Service & Document;
 
@@ -26,12 +26,13 @@ export class Service {
   @Prop({ required: false, default: 15, min: 5 })
   durationMinutes: number;
 
+  // Separate Category Model
   @Prop({
-    type: String,
-    enum: Object.values(ServiceCategory),
-    default: ServiceCategory.OTHER,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Category",
+    required: true,
   })
-  category: ServiceCategory;
+  categoryId: string;
 
   @Prop([String])
   tags: string[];

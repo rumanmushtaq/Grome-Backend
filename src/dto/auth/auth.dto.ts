@@ -2,6 +2,7 @@ import { IsEmail, IsString, IsOptional, IsPhoneNumber, MinLength, IsEnum, IsBool
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../schemas/user.schema';
+import { Gender } from 'aws-sdk/clients/polly';
 
 export class SignUpDto {
   @ApiProperty({ description: 'User email address' })
@@ -255,6 +256,7 @@ export class AuthResponseDto {
     phone?: string;
     name: string;
     role: UserRole;
+    gender: Gender;
     isVerified: boolean;
     avatarUrl?: string;
   };
