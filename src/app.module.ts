@@ -33,6 +33,7 @@ import { JobsModule } from './jobs/jobs.module';
 // Configuration
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -45,7 +46,7 @@ import { validationSchema } from './config/validation.schema';
 
     // Database
     DatabaseModule,
-    RedisModule,
+    // RedisModule,
 
     // Rate limiting
     ThrottlerModule.forRootAsync({
@@ -60,18 +61,18 @@ import { validationSchema } from './config/validation.schema';
     }),
 
     // Bull Queue
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          password: configService.get('REDIS_PASSWORD'),
-          db: configService.get('REDIS_DB', 0),
-        },
-      }),
-      inject: [ConfigService],
-    }),
+    // BullModule.forRootAsync({
+    //   imports: [ConfigModule],
+    //   useFactory: (configService: ConfigService) => ({
+    //     redis: {
+    //       host: configService.get('REDIS_HOST', 'localhost'),
+    //       port: configService.get('REDIS_PORT', 6379),
+    //       password: configService.get('REDIS_PASSWORD'),
+    //       db: configService.get('REDIS_DB', 0),
+    //     },
+    //   }),
+    //   inject: [ConfigService],
+    // }),
 
     // JWT
     JwtModule.registerAsync({
@@ -110,7 +111,7 @@ import { validationSchema } from './config/validation.schema';
     SearchModule,
     PromoCodesModule,
     ReportsModule,
-    ThreadModule
+    CategoryModule
   ],
 })
 export class AppModule {}

@@ -1,3 +1,4 @@
+import { Gender } from '@/modules/auth/enums/gender.enum';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -53,6 +54,11 @@ export class User {
   @Prop()
   lastLoginAt?: Date;
 
+
+ @Prop({ type: String, enum: Gender, default: Gender.OTHER })
+  gender?: Gender;
+
+  
   @Prop()
   emailVerifiedAt?: Date;
 
