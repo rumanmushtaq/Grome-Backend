@@ -190,7 +190,7 @@ export class AdminServicesService {
         service.basePrice = updateServiceDto.basePrice;
       if (updateServiceDto.icon) service.iconUrl = updateServiceDto.icon;
       if (updateServiceDto.category)
-        service.category = updateServiceDto.category;
+        // service.category = updateServiceDto.category;
       if (updateServiceDto.tags) service.tags = updateServiceDto.tags;
       if (updateServiceDto.description)
         service.description = updateServiceDto.description;

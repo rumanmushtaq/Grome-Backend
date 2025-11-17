@@ -7,4 +7,5 @@ export enum FILE_TYPE {
   SERVICE = 'service',
   KYC = 'kyc',
   SUBSERVICE = 'subservice',
+  CATEGORY = 'category'
 }

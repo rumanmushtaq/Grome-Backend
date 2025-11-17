@@ -33,6 +33,7 @@ import {
   BarberSignUpDto,
 } from "../../dto/auth/auth.dto";
 import { OtpService } from "./otp.service";
+import { getRandomDescription } from "./data/static";
 
 @Injectable()
 export class AuthService {
@@ -105,6 +106,7 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         name: user.name,
+        gender : user.gender,
         role: user.role,
         isVerified: user.isVerified,
         avatarUrl: user.avatarUrl,
@@ -176,6 +178,7 @@ export class AuthService {
         type: "Point",
         coordinates: [location.longitude, location.latitude],
       },
+      description: getRandomDescription(),
       services: services.map((service) => ({
         serviceId: service.serviceId,
         price: service.price,
@@ -214,6 +217,7 @@ export class AuthService {
         phone: user.phone,
         name: user.name,
         role: user.role,
+        gender: user.gender,
         isVerified: user.isVerified,
         avatarUrl: user.avatarUrl,
       },
@@ -268,6 +272,7 @@ export class AuthService {
         phone: user.phone,
         name: user.name,
         role: user.role,
+        gender: user.gender,
         isVerified: user.isVerified,
         avatarUrl: user.avatarUrl,
       },
@@ -317,6 +322,7 @@ export class AuthService {
         phone: user.phone,
         name: user.name,
         role: user.role,
+        gender: user.gender,
         isVerified: user.isVerified,
         avatarUrl: user.avatarUrl,
       },

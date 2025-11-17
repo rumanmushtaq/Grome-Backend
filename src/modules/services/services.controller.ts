@@ -1,5 +1,11 @@
 import { Controller, Get, Param, Query } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse, ApiParam ,  ApiQuery,} from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from "@nestjs/swagger";
 
 import { ServicesService } from "./services.service";
 import { PaginationDto } from "@/dto/common/pagination.dto";
@@ -13,12 +19,15 @@ export class ServicesController {
   @ApiOperation({ summary: "Get all services (with pagination)" })
   @ApiResponse({ status: 200, description: "Services retrieved successfully" })
   @ApiResponse({ status: 400, description: "Invalid query parameters" })
-    @ApiQuery({ name: "page", required: false, type: Number })
-    @ApiQuery({ name: "limit", required: false, type: Number })
-    @ApiQuery({ name: "sortBy", required: false, type: String })
-    @ApiQuery({ name: "sortOrder", required: false, enum: ["asc", "desc"] })
-    @ApiQuery({ name: "active", required: false, type: Boolean })
-  async findAll(@Query() query: PaginationDto, @Query("active") active?: boolean) {
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "sortBy", required: false, type: String })
+  @ApiQuery({ name: "sortOrder", required: false, enum: ["asc", "desc"] })
+  @ApiQuery({ name: "active", required: false, type: Boolean })
+  async findAll(
+    @Query() query: PaginationDto,
+    @Query("active") active?: boolean
+  ) {
     return this.servicesService.findAll(query, active);
   }
 
@@ -43,7 +52,6 @@ export class ServicesController {
     return this.servicesService.getCategories();
   }
 
-  
   @Get(":id")
   @ApiOperation({ summary: "Get service by ID" })
   @ApiParam({ name: "id", description: "Service ID" })
@@ -51,5 +59,4 @@ export class ServicesController {
   async findById(@Param("id") id: string) {
     return this.servicesService.findById(id);
   }
-
 }
