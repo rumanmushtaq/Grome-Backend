@@ -2,6 +2,7 @@ import { IsEmail, IsString, IsOptional, IsPhoneNumber, IsEnum, IsBoolean, IsObje
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, VerificationStatus } from '../../schemas/user.schema';
+import { Gender } from '@/modules/auth/enums/gender.enum';
 
 export class NotificationPreferencesDto {
   @ApiPropertyOptional({ description: 'Email notifications enabled' })
@@ -102,6 +103,9 @@ export class UserResponseDto {
 
   @ApiProperty({ description: 'User role', enum: UserRole })
   role: UserRole;
+
+  @ApiProperty({ description: 'User role', enum: Gender })
+  gender?: Gender;
 
   @ApiProperty({ description: 'Is user verified' })
   isVerified: boolean;

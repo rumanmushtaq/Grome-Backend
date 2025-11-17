@@ -208,6 +208,7 @@ export class UsersService {
         emailVerifiedAt: user.emailVerifiedAt,
         phoneVerifiedAt: user.phoneVerifiedAt,
         preferences: user.preferences,
+        gender: user.gender,
         verification: user.verification,
         createdAt: (user as any).createdAt,
         updatedAt: (user as any).updatedAt,

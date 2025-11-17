@@ -75,25 +75,17 @@ async getAllServices(@Query() query: PaginationDto) {
     return this.adminServicesService.deleteService(id);
   }
 
-  @Put(':id/activate')
-  @ApiOperation({ summary: 'Activate service (Admin only)' })
-  @ApiParam({ name: 'id', description: 'Service ID' })
-  @ApiResponse({ status: 200, description: 'Service successfully activated' })
-  @ApiResponse({ status: 404, description: 'Service not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin access required' })
-  async activateService(@Param('id') id: string) {
-    return this.adminServicesService.updateServiceStatus(id, true);
-  }
-
-  @Put(':id/deactivate')
-  @ApiOperation({ summary: 'Deactivate service (Admin only)' })
-  @ApiParam({ name: 'id', description: 'Service ID' })
-  @ApiResponse({ status: 200, description: 'Service successfully deactivated' })
-  @ApiResponse({ status: 404, description: 'Service not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin access required' })
-  async deactivateService(@Param('id') id: string) {
-    return this.adminServicesService.updateServiceStatus(id, false);
-  }
+@Put(':id/status')
+@ApiOperation({ summary: 'Update service status (Admin only)' })
+@ApiParam({ name: 'id', description: 'Service ID' })
+@ApiResponse({ status: 200, description: 'Service status updated' })
+@ApiResponse({ status: 404, description: 'Service not found' })
+@ApiResponse({ status: 400, description: 'Invalid data' })
+@ApiResponse({ status: 403, description: 'Forbidden - Admin only' })
+async updateServiceStatus(
+  @Param('id') id: string,
+  @Body('isActive') isActive: boolean
+) {
+  return this.adminServicesService.updateServiceStatus(id, isActive);
+}
 }

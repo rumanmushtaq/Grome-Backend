@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   BadRequestException,
   InternalServerErrorException,
+  forwardRef,
+  Inject,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -19,10 +21,13 @@ import {
   MessageStatus,
 } from "../../schemas/chat-message.schema";
 import { User, UserDocument } from "../../schemas/user.schema";
+import { ChatGateway } from "./chat.gateway";
 
 @Injectable()
 export class ChatService {
   constructor(
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
     @InjectModel(Conversation.name)
     private conversationModel: Model<ConversationDocument>,
     @InjectModel(ChatMessage.name)
@@ -276,6 +281,12 @@ export class ChatService {
     attachments?: any[];
     clientMessageId?: string;
   }): Promise<ChatMessageDocument> {
+    const session = await this.chatMessageModel.startSession();
+    session.startTransaction();
+
+
+    console.log(1)
+
     try {
       const {
         conversationId,
@@ -295,6 +306,7 @@ export class ChatService {
           "Sender user ID (fromUserId) is required"
         );
       }
+      console.log(2)
 
       // ✅ Verify user has access
       const hasAccess = await this.verifyConversationAccess(
@@ -304,18 +316,22 @@ export class ChatService {
       if (!hasAccess) {
         throw new ForbiddenException("Access denied to conversation");
       }
+      console.log(3)
+
       // ✅ Find the conversation
-      const conversation =
-        await this.conversationModel.findById(conversationId);
+      const conversation = await this.conversationModel
+        .findById(conversationId)
+        .session(session);
       if (!conversation) {
         throw new NotFoundException("Conversation not found");
       }
+      console.log(4)
 
       const toUserId =
         conversation.customerId.toString() === fromUserId
           ? conversation.barberId
           : conversation.customerId;
-
+      console.log(5)
       // ✅ Normalize and validate attachments
       const normalizedAttachments =
         attachments?.map((att, index) => {
@@ -335,53 +351,82 @@ export class ChatService {
           };
         }) ?? [];
 
+        console.log(6)
+
       // ✅ Create message document
-      const chatMessage = new this.chatMessageModel({
-        conversationId,
-        fromUserId,
-        toUserId,
-        type,
-        message,
-        attachments: normalizedAttachments,
-        status: MessageStatus.SENT,
-        sentAt: new Date(),
-        clientMessageId,
-      });
-
-      await chatMessage.save();
-
-      // ✅ Update conversation metadata safely
-      await this.conversationModel.findByIdAndUpdate(conversationId, {
-        lastMessage:
-          message || (normalizedAttachments.length > 0 ? "📎 Attachment" : ""),
-        lastMessageAt: new Date(),
-        lastMessageBy: fromUserId,
-      });
-
-      // ✅ Update unread count for recipient
+      const chatMessage = new this.chatMessageModel(
+        {
+          conversationId,
+          fromUserId,
+          toUserId,
+          type,
+          message,
+          attachments: normalizedAttachments,
+          status: MessageStatus.SENT,
+          sentAt: new Date(),
+          clientMessageId,
+        },
+       
+      );
+      console.log(7)
+      await chatMessage.save({ session });
+console.log(71)
+      // Update conversation metadata
       const recipientField =
         conversation.customerId.toString() === fromUserId
           ? "barber"
           : "customer";
-
-      await this.conversationModel.findByIdAndUpdate(conversationId, {
-        $inc: { [`readStatus.${recipientField}.unreadCount`]: 1 },
-      });
+console.log(8)
+      // ✅ Update conversation metadata safely
+      await this.conversationModel.findByIdAndUpdate(
+        conversationId,
+        {
+          lastMessage:
+            message ||
+            (normalizedAttachments.length > 0 ? "📎 Attachment" : ""),
+          lastMessageAt: new Date(),
+          lastMessageBy: fromUserId,
+          $inc: { [`readStatus.${recipientField}.unreadCount`]: 1 },
+        },
+        { session }
+      );
+console.log(9)
+      // ✅ Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
 
       // ✅ Populate sender info
       const populatedMessage = await chatMessage.populate(
         "fromUserId",
         "name avatarUrl"
       );
-
-      
+console.log(10)
+      // ✅ Emit via WebSocket AFTER successful commit
+      this.chatGateway.sendToConversation(
+        conversationId,
+        "new_message",
+        populatedMessage
+      );
+      console.log(11)
+      this.chatGateway.sendToConversation(
+        conversationId,
+        "conversation_updated",
+        {
+          conversationId,
+          lastMessage: message,
+          lastMessageAt: chatMessage.sentAt,
+        }
+      );
+      console.log(12)
 
       return populatedMessage;
     } catch (error) {
-      // ✅ Log error (replace console.error with Nest Logger if preferred)
+      // ✅ Abort the transaction if any error occurs
+      await session.abortTransaction();
+      session.endSession();
+
       console.error("❌ Error creating message:", error);
 
-      // ✅ Re-throw known exceptions directly
       if (
         error instanceof BadRequestException ||
         error instanceof ForbiddenException ||
@@ -390,7 +435,6 @@ export class ChatService {
         throw error;
       }
 
-      // ✅ Wrap unknown errors in a safe internal server error
       throw new InternalServerErrorException(
         error.message || "An unexpected error occurred while creating message"
       );
