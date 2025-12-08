@@ -34,6 +34,7 @@ export class ConfigService {
       JWT_EXPIRES_IN: Joi.string().trim().min(1).required(),
       JWT_REFRESH_SECRET: Joi.string().trim().min(1).required(),
       JWT_REFRESH_EXPIRES_IN: Joi.string().trim().min(1).required(),
+      SENDGRID_API_KEY: Joi.string().trim().min(1).required(),
 
 
       AWS_ACCESS_KEY_ID: Joi.string().trim().min(1).required(),
@@ -137,6 +138,9 @@ export class ConfigService {
   }
   get JWT_REFRESH_EXPIRES_IN(): string {
     return this.envConfig.JWT_REFRESH_EXPIRES_IN;
+  }
+  get SENDGRID_API_KEY(): string {
+    return this.envConfig.SENDGRID_API_KEY;
   }
   get AWS_ACCESS_KEY_ID(): string {
     return this.envConfig.AWS_ACCESS_KEY_ID;

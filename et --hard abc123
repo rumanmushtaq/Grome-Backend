@@ -1,0 +1,40 @@
+[33m15ee7aa[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-categories[m[33m)[m changes
+[33mc287fc3[m changes
+[33m6ff78ff[m done
+[33m1a05c0c[m changes in categories and other services
+[33mb571346[m[33m ([m[1;31morigin/feature-categories[m[33m)[m changes
+[33m6311cc7[m[33m ([m[1;32mmain[m[33m)[m changes
+[33meab83da[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m types issue of express
+[33m3dd2849[m chang
+[33mc2e0f58[m changes
+[33mc756ee0[m again change docker version
+[33mbfc936a[m update docker
+[33m1ec2b62[m change in docker file
+[33mb6e6fce[m add yarn
+[33m8d8344f[m changes
+[33md6d9489[m Remove env file from repo
+[33m1866972[m Update Dockerfile
+[33me4e837a[m Update Dockerfile
+[33m503093d[m Update Dockerfile
+[33m8f4b01d[m Update Dockerfile
+[33mcd07dc9[m Create .env.stage.prod
+[33me6f9c34[m changes
+[33mda1e170[m create docker
+[33mbf43a24[m again changes in yml
+[33m581ea00[m changes
+[33m1edf18f[m changes in yml
+[33m46c2dc7[m Create docker-image.yml
+[33m3ebf020[m changes
+[33mf0f2351[m changes
+[33m0038085[m changes
+[33m3d7e211[m error
+[33me74fa11[m remove issue
+[33m43dfa7a[m changes
+[33m1071959[m resolve error of image upload
+[33m6e257d7[m changes
+[33m8469e2d[m social login
+[33mf0cddc7[m Merge pull request #2 from shehrii9/services-issues
+[33m16a9dbf[m[33m ([m[1;31morigin/services-issues[m[33m)[m changes in services
+[33m0d5eddc[m[33m ([m[1;31morigin/Staging[m[33m, [m[1;31morigin/Production[m[33m)[m Merge pull request #1 from shehrii9/barber-signup
+[33m2a7807d[m[33m ([m[1;31morigin/barber-signup[m[33m)[m added barber signup and services
+[33m1d6b70e[m first commit
