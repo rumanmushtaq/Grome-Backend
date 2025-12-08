@@ -1,36 +1,38 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type BookingDocument = Booking & Document;
 
 export enum BookingStatus {
-  REQUESTED = 'requested',
-  ACCEPTED = 'accepted',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-  NO_SHOW = 'no_show',
+  REQUESTED = "requested",
+  ACCEPTED = "accepted",
+  IN_PROGRESS = "in_progress",
+  COMPLETED = "completed",
+  CANCELLED = "cancelled",
+  NO_SHOW = "no_show",
 }
 
 export enum BookingType {
-  INSTANT = 'instant',
-  SCHEDULED = 'scheduled',
+  INSTANT = "instant",
+  SCHEDULED = "scheduled",
 }
 
 @Schema({ timestamps: true })
 export class Booking {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true, index: true })
   customerId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Barber', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "Barber", required: true, index: true })
   barberId: Types.ObjectId;
 
-  @Prop([{
-    serviceId: { type: Types.ObjectId, ref: 'Service', required: true },
-    price: { type: Number, required: true, min: 0 },
-    duration: { type: Number, required: true, min: 15 },
-    name: { type: String, required: true },
-  }])
+  @Prop([
+    {
+      serviceId: { type: Types.ObjectId, ref: "Service", required: true },
+      price: { type: Number, required: true, min: 0 },
+      duration: { type: Number, required: true, min: 15 },
+      name: { type: String, required: true },
+    },
+  ])
   services: Array<{
     serviceId: Types.ObjectId;
     price: number;
@@ -41,18 +43,18 @@ export class Booking {
   @Prop({ required: true })
   scheduledAt: Date;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(BookingStatus), 
+  @Prop({
+    type: String,
+    enum: Object.values(BookingStatus),
     default: BookingStatus.REQUESTED,
-    index: true 
+    index: true,
   })
   status: BookingStatus;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(BookingType), 
-    default: BookingType.SCHEDULED 
+  @Prop({
+    type: String,
+    enum: Object.values(BookingType),
+    default: BookingType.SCHEDULED,
   })
   type: BookingType;
 
@@ -60,12 +62,12 @@ export class Booking {
   @Prop({
     type: {
       type: String,
-      enum: ['Point'],
+      enum: ["Point"],
     },
     coordinates: [Number],
   })
   location?: {
-    type: 'Point';
+    type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
   };
 
@@ -100,13 +102,13 @@ export class Booking {
   // Payment information
   @Prop({
     type: {
-      status: { 
-        type: String, 
-        enum: ['pending', 'processing', 'completed', 'failed', 'refunded'], 
-        default: 'pending' 
+      status: {
+        type: String,
+        enum: ["pending", "processing", "completed", "failed", "refunded"],
+        default: "pending",
       },
       amount: { type: Number, required: true, min: 0 },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: "USD" },
       stripePaymentId: String,
       stripePaymentIntentId: String,
       commission: { type: Number, default: 0, min: 0 },
@@ -130,6 +132,10 @@ export class Booking {
     refundedAt?: Date;
   };
 
+
+  // @Prop({ type: Types.ObjectId, ref: "Payment", index: true })
+  // paymentId?: Types.ObjectId;
+
   // Special requests and notes
   @Prop()
   specialRequests?: string;
@@ -141,7 +147,7 @@ export class Booking {
   barberNotes?: string;
 
   // Promo code
-  @Prop({ type: Types.ObjectId, ref: 'PromoCode' })
+  @Prop({ type: Types.ObjectId, ref: "PromoCode" })
   promoCodeId?: Types.ObjectId;
 
   @Prop({ default: 0, min: 0 })
@@ -167,7 +173,7 @@ export class Booking {
   barberReviewedAt?: Date;
 
   // Communication
-  @Prop({ type: Types.ObjectId, ref: 'Conversation' })
+  @Prop({ type: Types.ObjectId, ref: "Conversation" })
   conversationId?: Types.ObjectId;
 
   // Metadata
@@ -181,10 +187,10 @@ export class Booking {
   ipAddress?: string;
 
   // Recurring booking
-  @Prop({ type: Types.ObjectId, ref: 'Booking' })
+  @Prop({ type: Types.ObjectId, ref: "Booking" })
   parentBookingId?: Types.ObjectId;
 
-  @Prop([{ type: Types.ObjectId, ref: 'Booking' }])
+  @Prop([{ type: Types.ObjectId, ref: "Booking" }])
   childBookingIds: Types.ObjectId[];
 
   @Prop()
@@ -204,7 +210,7 @@ BookingSchema.index({ barberId: 1, scheduledAt: 1 });
 BookingSchema.index({ customerId: 1, scheduledAt: -1 });
 BookingSchema.index({ status: 1, scheduledAt: 1 });
 BookingSchema.index({ type: 1, scheduledAt: 1 });
-BookingSchema.index({ 'payment.status': 1 });
-BookingSchema.index({ location: '2dsphere' });
+BookingSchema.index({ "payment.status": 1 });
+BookingSchema.index({ location: "2dsphere" });
 BookingSchema.index({ createdAt: -1 });
 BookingSchema.index({ isRecurring: 1, parentBookingId: 1 });

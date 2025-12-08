@@ -5,6 +5,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   HttpException,
+  NotFoundException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
@@ -32,8 +33,15 @@ import {
   SocialSignInDto,
   BarberSignUpDto,
 } from "../../dto/auth/auth.dto";
-import { OtpService } from "./otp.service";
+// import { OtpService } from "./otp.service";
 import { getRandomDescription } from "./data/static";
+import {
+  getUserNotFoundMessage,
+  OTP_SENT_MESSAGE,
+} from "@/constants/messages.constants";
+import { ResponseDto } from "@/dto/response/response.dto";
+// import { OtpService } from "./otp.service";
+import { OtpService } from "./services/otp.service";
 
 @Injectable()
 export class AuthService {
@@ -44,7 +52,7 @@ export class AuthService {
     private refreshTokenModel: Model<RefreshTokenDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
-    private otpService: OtpService
+    private readonly otpService: OtpService
   ) {}
 
   async signUp(
@@ -83,11 +91,13 @@ export class AuthService {
     await user.save();
 
     // Send OTP to phone using Prelude.so
-    const otpResult = await this.otpService.sendOtp(phone);
+    // const otpResult = await this.otpService.sendOtp(phone);
+    const otpResult = await this.otpService.createOtp(phone);
 
     // Update user with verification ID
-    user.phoneVerificationId = otpResult.verificationId;
-    user.phoneVerificationExpires = otpResult.expiresAt;
+    user.phoneVerificationId = otpResult.id;
+    // user.phoneVerificationExpires = otpResult.expiresAt;
+    user.phoneVerificationExpires = new Date(Date.now() + 5 * 60 * 1000);
     await user.save();
 
     // Generate tokens with device information
@@ -106,7 +116,7 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         name: user.name,
-        gender : user.gender,
+        gender: user.gender,
         role: user.role,
         isVerified: user.isVerified,
         avatarUrl: user.avatarUrl,
@@ -193,11 +203,14 @@ export class AuthService {
     await barber.save();
 
     // Send OTP to phone using Prelude.so
-    const otpResult = await this.otpService.sendOtp(phone);
+    // const otpResult = await this.otpService.sendOtp(phone);
+    const otpResult = await this.otpService.createOtp(phone);
 
     // Update user with verification ID
-    user.phoneVerificationId = otpResult.verificationId;
-    user.phoneVerificationExpires = otpResult.expiresAt;
+    // user.phoneVerificationId = otpResult.verificationId;
+    // user.phoneVerificationExpires = otpResult.expiresAt;
+    user.phoneVerificationId = otpResult.id;
+    user.phoneVerificationExpires = new Date(Date.now() + 5 * 60 * 1000);
     await user.save();
 
     // Generate tokens with device information
@@ -381,26 +394,81 @@ export class AuthService {
     );
   }
 
-  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
-    const { email } = forgotPasswordDto;
+  // async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
+  //   const { email } = forgotPasswordDto;
 
-    const user = await this.userModel.findOne({ email });
-    if (!user) {
-      // Don't reveal if email exists or not
-      return;
+  //   const user = await this.userModel.findOne({ email });
+  //   if (!user) {
+  //     // Don't reveal if email exists or not
+  //     return;
+  //   }
+
+  //   // Generate reset token
+  //   const resetToken = uuidv4();
+  //   const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+
+  //   // Store reset token (in a real app, you'd store this in a separate collection)
+  //   user.passwordResetToken = resetToken;
+  //   user.passwordResetExpires = resetTokenExpiry;
+  //   await user.save();
+
+  //   // TODO: Send email with reset link
+  //   console.log(`Password reset token for ${email}: ${resetToken}`);
+  // }
+
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto
+  ): Promise<ResponseDto> {
+    try {
+      const { email } = forgotPasswordDto;
+
+      const user = await this.userModel.findOne({ email });
+
+      if (!user) {
+        // Throw an error if user not found
+        throw new NotFoundException(getUserNotFoundMessage(email));
+      }
+
+      // const isOtpExists = await this.otpService.findOtpByEmail(email);
+      // if (isOtpExists) {
+      //   // If an OTP exists, resend it
+      //   await this.otpService.deleteOtp(isOtpExists.email, isOtpExists.otp);
+      // }
+
+      // const { otp } = await this.otpService.createOtp(email);
+
+      // // Send email with otp
+      // await this.emailService.sendOTPEmail({
+      //   name: user.name,
+      //   to: email,
+      //   subject: 'Password Reset - CrowdGen AI',
+      //   otp,
+      // });
+
+      // Generate reset token
+      const resetToken = uuidv4();
+      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+
+      // Store reset token
+      user.passwordResetToken = resetToken;
+      user.passwordResetExpires = resetTokenExpiry;
+      await user.save();
+
+      // TODO: Send email with reset link
+      return new ResponseDto(true, OTP_SENT_MESSAGE);
+    } catch (error) {
+      console.error("Error in forgotPassword:", error);
+
+      // If the error is already a known NestJS exception, rethrow it
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      // Otherwise, throw generic internal server error
+      throw new InternalServerErrorException(
+        "An error occurred while processing the password reset request"
+      );
     }
-
-    // Generate reset token
-    const resetToken = uuidv4();
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
-
-    // Store reset token (in a real app, you'd store this in a separate collection)
-    user.passwordResetToken = resetToken;
-    user.passwordResetExpires = resetTokenExpiry;
-    await user.save();
-
-    // TODO: Send email with reset link
-    console.log(`Password reset token for ${email}: ${resetToken}`);
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
@@ -446,13 +514,13 @@ export class AuthService {
     }
 
     // Verify OTP code using Prelude.so
-    const isValid = await this.otpService.verifyOtp(
-      user.phoneVerificationId,
-      code
-    );
-    if (!isValid) {
-      throw new BadRequestException("Invalid or expired verification code");
-    }
+    // const isValid = await this.otpService.verifyOtp(
+    //   user.phoneVerificationId,
+    //   code
+    // );
+    // if (!isValid) {
+    //   throw new BadRequestException("Invalid or expired verification code");
+    // }
 
     // Mark user as verified
     user.isVerified = true;
@@ -474,11 +542,13 @@ export class AuthService {
     }
 
     // Send new OTP using Prelude.so
-    const otpResult = await this.otpService.sendOtp(phone);
+    const otpResult = await this.otpService.createOtp(phone);
+    // const otpResult = await this.otpService.sendOtp(phone);
 
     // Update user with new verification ID
-    user.phoneVerificationId = otpResult.verificationId;
-    user.phoneVerificationExpires = otpResult.expiresAt;
+    user.phoneVerificationId = otpResult.id;
+    // user.phoneVerificationExpires = otpResult.expiresAt;
+    user.phoneVerificationExpires = new Date(Date.now() + 5 * 60 * 1000);
     await user.save();
   }
 

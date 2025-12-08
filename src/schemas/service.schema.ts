@@ -3,18 +3,9 @@ import mongoose, { Document, Types } from "mongoose";
 
 export type ServiceDocument = Service & Document;
 
-export enum ServiceCategory {
-  HAIRCUT = "haircut",
-  BEARD = "beard",
-  STYLING = "styling",
-  COLORING = "coloring",
-  TREATMENT = "treatment",
-  OTHER = "other",
-}
-
 @Schema({ timestamps: true })
 export class Service {
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   name: string;
 
   @Prop()
@@ -23,16 +14,20 @@ export class Service {
   @Prop({ required: true, min: 0 })
   basePrice: number;
 
-  @Prop({ required: false, default: 15, min: 5 })
+  @Prop({ required: false, min: 5 })
   durationMinutes: number;
 
-  // Separate Category Model
+  /* ==========================
+     CATEGORIES (MULTI)
+  ========================== */
+
   @Prop({
-    type: mongoose.Schema.Types.ObjectId,
+    type: [mongoose.Schema.Types.ObjectId],
     ref: "Category",
     required: true,
+    index: true,
   })
-  categoryId: string;
+  categoryIds: Types.ObjectId[];
 
   @Prop([String])
   tags: string[];

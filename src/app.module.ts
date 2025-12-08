@@ -25,8 +25,8 @@ import { S3StorageModule } from "./modules/s3Storage/s3Storage.module";
 import { ThreadModule } from "./modules/thread/thread.module";
 
 // Shared modules
-import { DatabaseModule } from "./config/database.module";
-import { RedisModule } from "./config/redis.module";
+import { DatabaseModule } from "./modules/database/database.module";
+// import { RedisModule } from "./config/redis.module";
 import { LoggerModule } from "./common/logger/logger.module";
 import { JobsModule } from "./jobs/jobs.module";
 
@@ -34,6 +34,7 @@ import { JobsModule } from "./jobs/jobs.module";
 import configuration from "./config/configuration";
 import { validationSchema } from "./config/validation.schema";
 import { CategoryModule } from "./modules/category/category.module";
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -115,6 +116,8 @@ import { CategoryModule } from "./modules/category/category.module";
     PromoCodesModule,
     ReportsModule,
     CategoryModule,
+    DashboardModule,
+    DashboardModule
   ],
 })
 export class AppModule {}

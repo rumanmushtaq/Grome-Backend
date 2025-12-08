@@ -1,17 +1,23 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type BarberDocument = Barber & Document;
 
 @Schema({ timestamps: true })
 export class Barber {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: "User",
+    required: true,
+    unique: true,
+    index: true,
+  })
   userId: Types.ObjectId;
 
   @Prop({
     type: {
       type: String,
-      enum: ['Point'],
+      enum: ["Point"],
       required: true,
     },
     coordinates: {
@@ -20,14 +26,16 @@ export class Barber {
     },
   })
   location: {
-    type: 'Point';
+    type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
   };
 
-  @Prop([{
-    serviceId: { type: Types.ObjectId, ref: 'Service', required: true },
-    price: { type: Number, required: true, min: 0 },
-  }])
+  @Prop([
+    {
+      serviceId: { type: Types.ObjectId, ref: "Service", required: true },
+      price: { type: Number, required: true, min: 0 },
+    },
+  ])
   services: Array<{
     serviceId: Types.ObjectId;
     price: number;
@@ -43,66 +51,80 @@ export class Barber {
     type: {
       monday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       tuesday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       wednesday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       thursday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       friday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       saturday: {
         isAvailable: { type: Boolean, default: true },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
       sunday: {
         isAvailable: { type: Boolean, default: false },
-        startTime: { type: String, default: '09:00' },
-        endTime: { type: String, default: '18:00' },
-        breaks: [{
-          startTime: String,
-          endTime: String,
-        }],
+        startTime: { type: String, default: "09:00" },
+        endTime: { type: String, default: "18:00" },
+        breaks: [
+          {
+            startTime: String,
+            endTime: String,
+          },
+        ],
       },
     },
     default: {},
@@ -209,7 +231,7 @@ export class Barber {
 export const BarberSchema = SchemaFactory.createForClass(Barber);
 
 // 2dsphere index for geospatial queries
-BarberSchema.index({ location: '2dsphere' });
+BarberSchema.index({ location: "2dsphere" });
 
 BarberSchema.index({ isActive: 1 });
 BarberSchema.index({ isOnline: 1 });

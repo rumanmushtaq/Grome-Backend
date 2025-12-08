@@ -55,6 +55,10 @@ export class User {
   lastLoginAt?: Date;
 
 
+  @Prop({ default: false })
+  isDeleted: boolean;
+
+
  @Prop({ type: String, enum: Gender, default: Gender.OTHER })
   gender?: Gender;
 

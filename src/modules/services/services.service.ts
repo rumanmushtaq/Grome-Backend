@@ -35,19 +35,55 @@ export class ServicesService {
         ...(active !== undefined ? { isActive: active } : {}),
       };
 
-      // Count total active items
-      const totalItems = await this.serviceModel.countDocuments(filter);
+      // ------------------------------
+      // AGGREGATION PIPELINE
+      // ------------------------------
+      const result = await this.serviceModel.aggregate([
+        // 1) Apply isActive filter (if provided)
+        { $match: filter },
 
-      // Fetch paginated active services
-      const services = await this.serviceModel
-        .find(filter)
-        .sort({ [sortBy]: sortDirection })
-        .skip(skip)
-        .limit(limit)
-        .exec();
+        // 2) Sort
+        { $sort: { [sortBy]: sortDirection } },
 
-      // Calculate pagination metadata
+        // 3) FACET -> data + total count
+        {
+          $facet: {
+            data: [
+              { $skip: skip },
+              { $limit: limit },
+
+              // JOIN category
+              {
+                $lookup: {
+                  from: "categories", // IMPORTANT: match real collection name
+                  localField: "categoryId",
+                  foreignField: "_id",
+                  as: "category",
+                },
+              },
+
+              // category array -> object
+              {
+                $unwind: {
+                  path: "$category",
+                  preserveNullAndEmptyArrays: true,
+                },
+              },
+            ],
+
+            // Meta: count all matched documents
+            meta: [{ $count: "totalItems" }],
+          },
+        },
+      ]);
+
+      const services = result[0].data;
+      const totalItems = result[0].meta[0]?.totalItems || 0;
       const totalPages = Math.ceil(totalItems / limit);
+
+      // ------------------------------
+      // Final Response
+      // ------------------------------
 
       return {
         message: "All services retrieved successfully",

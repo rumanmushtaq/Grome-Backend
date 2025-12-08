@@ -1,4 +1,4 @@
-import { IsOptional, IsPositive, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsPositive, IsInt, Min, Max, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -40,6 +40,14 @@ export class PaginationDto {
   })
   @IsOptional()
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+    @ApiPropertyOptional({
+    description: 'Search term',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 export class CursorPaginationDto {

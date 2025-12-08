@@ -27,10 +27,10 @@ export class UpdateProfileDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ description: 'User email address' })
-  @IsOptional()
-  @IsEmail()
-  email?: string;
+  // @ApiPropertyOptional({ description: 'User email address' })
+  // @IsOptional()
+  // @IsEmail()
+  // email?: string;
 
   @ApiPropertyOptional({ description: 'User phone number' })
   @IsOptional()

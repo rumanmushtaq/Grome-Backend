@@ -26,7 +26,7 @@ export class AdminServicesService {
   async createService(
     createServiceDto: AdminCreateServiceDto
   ): Promise<object> {
-    const { title, basePrice, icon, durationMinutes, category, tags } =
+    const { title, basePrice, icon, durationMinutes, categoryId, tags } =
       createServiceDto;
 
     try {
@@ -42,7 +42,7 @@ export class AdminServicesService {
         name: title,
         basePrice,
         iconUrl: icon,
-        category,
+        categoryId,
         tags,
         durationMinutes,
         isActive: true,
@@ -83,18 +83,67 @@ export class AdminServicesService {
       const skip = (page - 1) * limit;
       const sortDirection = sortOrder === "asc" ? 1 : -1;
 
-      // Fetch total count (all services, active or inactive)
-      const totalItems = await this.serviceModel.countDocuments();
+      // ----------------------------
+      // Aggregation with category
+      // ----------------------------
+      const result = await this.serviceModel.aggregate([
+        // 1) Sort first
+        {
+          $sort: { [sortBy]: sortDirection },
+        },
 
-      // Fetch paginated services
-      const services = await this.serviceModel
-        .find()
-        .sort({ [sortBy]: sortDirection })
-        .skip(skip)
-        .limit(limit)
-        .exec();
+        // 2) Pagination + lookup using FACET
+        {
+          $facet: {
+            data: [
+              { $skip: skip },
+              { $limit: limit },
 
-      // Calculate pagination metadata
+              // JOIN Category collection
+              {
+                $lookup: {
+                  from: "categories", // MUST match your real collection name!
+                  localField: "categoryId",
+                  foreignField: "_id",
+                  as: "category",
+                },
+              },
+
+              // Convert array → object
+              {
+                $unwind: {
+                  path: "$category",
+                  preserveNullAndEmptyArrays: true,
+                },
+              },
+
+              // Optional: projection cleanup
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  price: 1,
+                  isActive: 1,
+                  createdAt: 1,
+                  updatedAt: 1,
+                  category: {
+                    _id: 1,
+                    title: 1,
+                    iconUrl: 1,
+                  },
+                },
+              },
+            ],
+
+            // Meta: total count
+            meta: [{ $count: "totalItems" }],
+          },
+        },
+      ]);
+
+      const services = result[0].data;
+      const totalItems = result[0].meta[0]?.totalItems || 0;
+
       const totalPages = Math.ceil(totalItems / limit);
 
       return {
@@ -189,8 +238,8 @@ export class AdminServicesService {
       if (updateServiceDto.basePrice !== undefined)
         service.basePrice = updateServiceDto.basePrice;
       if (updateServiceDto.icon) service.iconUrl = updateServiceDto.icon;
-      if (updateServiceDto.category)
-        // service.category = updateServiceDto.category;
+      if (updateServiceDto.categoryIds)
+        service.categoryIds = updateServiceDto.categoryIds as any;
       if (updateServiceDto.tags) service.tags = updateServiceDto.tags;
       if (updateServiceDto.description)
         service.description = updateServiceDto.description;

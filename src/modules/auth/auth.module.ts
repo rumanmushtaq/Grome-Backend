@@ -6,7 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { OtpService } from './otp.service';
+// import { OtpService } from './otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
@@ -23,9 +23,12 @@ import { RefreshToken, RefreshTokenSchema } from '../../schemas/refresh-token.sc
 // DTOs
 import { AuthResponseDto } from '../../dto/auth/auth.dto';
 import { ThreadEntity, ThreadSchema } from '@/schemas/thread.schema';
+import { DatabaseModule } from '../database/database.module';
+import { OtpService } from './services/otp.service';
 
 @Module({
   imports: [
+    DatabaseModule,
     ConfigModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -48,7 +51,7 @@ import { ThreadEntity, ThreadSchema } from '@/schemas/thread.schema';
   controllers: [AuthController],
   providers: [
     AuthService,
-    OtpService,
+    // OtpService,
     JwtStrategy,
     LocalStrategy,
     GoogleStrategy,
@@ -56,6 +59,7 @@ import { ThreadEntity, ThreadSchema } from '@/schemas/thread.schema';
     AppleStrategy,
     JwtAuthGuard,
     LocalAuthGuard,
+    OtpService
   ],
   exports: [AuthService, JwtAuthGuard, LocalAuthGuard],
 })

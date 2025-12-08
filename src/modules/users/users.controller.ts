@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  Delete,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -112,6 +113,7 @@ export class UsersController {
   @ApiQuery({ name: "limit", required: false, type: Number })
   @ApiQuery({ name: "sortBy", required: false, type: String })
   @ApiQuery({ name: "sortOrder", required: false, enum: ["asc", "desc"] })
+  @ApiQuery({ name: "search", required: false, type: String })
   @ApiQuery({ name: "role", required: false, enum: UserRole })
   async getAllUsers(
     @Query() paginationDto: PaginationDto,
@@ -119,8 +121,8 @@ export class UsersController {
   ) {
     console.log("Fetching users with role:", role);
     return this.usersService.getAllUsers(
-      paginationDto.page,
-      paginationDto.limit,
+
+      paginationDto,
       role
     );
   }
@@ -204,5 +206,21 @@ export class UsersController {
     @Query("isVerified") isVerified: boolean
   ): Promise<UserResponseDto> {
     return this.usersService.toggleVerification(id, isVerified);
+  }
+
+
+
+
+  @Delete(":id")
+  @Roles(UserRole.ADMIN)
+  softDelete(@Param("id") id: string) {
+    return this.usersService.softDeleteUser(id);
+  }
+
+
+  @Patch("restore/:id")
+  @Roles(UserRole.ADMIN)
+  restoreUser(@Param("id") id: string) {
+    return this.usersService.restoreUser(id);
   }
 }

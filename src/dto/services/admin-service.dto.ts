@@ -1,6 +1,6 @@
-import { IsString, IsNumber, IsArray, IsEnum, IsOptional, Min, IsUrl, IsInt, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsArray, IsEnum, IsOptional, Min, IsUrl, IsInt, IsBoolean, IsMongoId } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ServiceCategory } from '../../schemas/service.schema';
+
 
 export class AdminCreateServiceDto {
   @ApiProperty({ description: 'Service title/name' })
@@ -16,9 +16,12 @@ export class AdminCreateServiceDto {
   @IsUrl()
   icon: string;
 
-  @ApiProperty({ description: 'Service category', enum: ServiceCategory })
-  @IsEnum(ServiceCategory)
-  category: ServiceCategory;
+  @ApiProperty({ 
+    description: 'MongoDB Category ID', 
+    example: '671f0be6d3afbdc40139d987' 
+  })
+  @IsMongoId()
+  categoryId: string;
 
   @ApiProperty({ description: 'Service duration in minutes' })
   @IsInt()
@@ -48,10 +51,11 @@ export class AdminUpdateServiceDto {
   @IsUrl()
   icon?: string;
 
-  @ApiPropertyOptional({ description: 'Service category', enum: ServiceCategory })
+    // ✅ FIX HERE
   @IsOptional()
-  @IsEnum(ServiceCategory)
-  category?: ServiceCategory;
+  @IsArray()
+  @IsMongoId({ each: true })
+  categoryIds?: string[];
 
   @ApiPropertyOptional({ description: 'Service tags', type: [String] })
   @IsOptional()

@@ -1,4 +1,4 @@
-import { DatabaseModule } from "@/config/database.module";
+import { DatabaseModule } from "@/modules/database/database.module";
 import { Module } from "@nestjs/common";
 import { CategoryController } from "./category.controller";
 import { CategoryService } from "./category.service";

@@ -3,9 +3,10 @@ import {
   NotFoundException,
   ForbiddenException,
   InternalServerErrorException,
+  BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { isValidObjectId, Model } from "mongoose";
 
 import {
   User,
@@ -18,6 +19,7 @@ import {
   BarberVerificationDto,
   UserResponseDto,
 } from "../../dto/users/user.dto";
+import { PaginationDto } from "@/dto/common/pagination.dto";
 
 @Injectable()
 export class UsersService {
@@ -125,8 +127,7 @@ export class UsersService {
   }
 
   async getAllUsers(
-    page: number = 1,
-    limit: number = 10,
+    paginationDto: PaginationDto,
     role?: string
   ): Promise<{
     users: UserResponseDto[];
@@ -135,21 +136,84 @@ export class UsersService {
     limit: number;
     totalPages: number;
   }> {
-    const filter = role ? { role } : {};
-    const skip = (page - 1) * limit;
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        sortBy = "createdAt",
+        sortOrder = "desc",
+        search,
+      } = paginationDto;
 
-    const [users, total] = await Promise.all([
-      this.userModel.find(filter).skip(skip).limit(limit).exec(),
-      this.userModel.countDocuments(filter).exec(),
-    ]);
+      // Validate page & limit
+      if (page < 1)
+        throw new BadRequestException("Page must be greater than 0");
+      if (limit < 1 || limit > 100)
+        throw new BadRequestException("Limit must be between 1 and 100");
 
-    return {
-      users: users.map((user) => this.mapToResponseDto(user)),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+      const skip = (page - 1) * limit;
+
+      // Build filter
+      const filter: any = {};
+      if (role) filter.role = role;
+
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      // Validate sortBy field
+      const validSortFields = ["name", "email", "createdAt", "role"];
+      if (!validSortFields.includes(sortBy)) {
+        throw new BadRequestException(
+          `Invalid sortBy field. Valid fields: ${validSortFields.join(", ")}`
+        );
+      }
+
+      // Build sort
+      const sort: any = {};
+      sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+      // Fetch users and total count
+      const [users, total] = await Promise.all([
+        this.userModel.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+        this.userModel.countDocuments(filter).exec(),
+      ]);
+
+      // Map to DTO
+      const usersDto = users.map((user) => {
+        try {
+          return this.mapToResponseDto(user);
+        } catch (mapError) {
+          throw new InternalServerErrorException(
+            "Failed to map user data. Please try again later."
+          );
+        }
+      });
+
+      return {
+        users: usersDto,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+
+      // Catch unexpected errors
+      console.error("Unexpected error in getAllUsers:", error);
+      throw new InternalServerErrorException(
+        "An unexpected error occurred while fetching users"
+      );
+    }
   }
 
   async deactivateUser(userId: string): Promise<UserResponseDto> {
@@ -176,8 +240,10 @@ export class UsersService {
     return this.mapToResponseDto(user);
   }
 
-
-    async toggleVerification(userId: string , isVerified : boolean): Promise<UserResponseDto> {
+  async toggleVerification(
+    userId: string,
+    isVerified: boolean
+  ): Promise<UserResponseDto> {
     const user = await this.userModel
       .findByIdAndUpdate(userId, { isVerified: isVerified }, { new: true })
       .exec();
@@ -220,6 +286,71 @@ export class UsersService {
       // Throw a proper NestJS exception
       throw new InternalServerErrorException(
         "Failed to map user data. Please try again later."
+      );
+    }
+  }
+
+  async softDeleteUser(userId: string) {
+    try {
+      if (!isValidObjectId(userId)) {
+        throw new BadRequestException("Invalid User ID");
+      }
+
+      const user = await this.userModel.findOne({
+        _id: userId,
+        isDeleted: false,
+      });
+
+      if (!user) {
+        throw new NotFoundException("User not found or already deleted");
+      }
+
+      user.isDeleted = true;
+      await user.save();
+
+      return {
+        success: true,
+        message: "User soft-deleted successfully",
+        data: user,
+      };
+    } catch (error) {
+      console.error("Soft delete error:", error);
+
+      throw new InternalServerErrorException(
+        error?.message || "Failed to soft delete user. Please try again later."
+      );
+    }
+  }
+
+  // ----------------------------------------
+  // ♻️ Restore Soft-Deleted User
+  // ----------------------------------------
+  async restoreUser(userId: string) {
+    try {
+      if (!isValidObjectId(userId)) {
+        throw new BadRequestException("Invalid user ID.");
+      }
+
+      const user = await this.userModel.findOne({
+        _id: userId,
+        isDeleted: true,
+      });
+
+      if (!user) {
+        throw new NotFoundException("User not found or not deleted.");
+      }
+
+      user.isDeleted = false;
+      await user.save();
+
+      return {
+        success: true,
+        message: "User restored successfully.",
+        data: user,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        error?.message || "Failed to restore user. Please try again later."
       );
     }
   }
