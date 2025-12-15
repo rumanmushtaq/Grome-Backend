@@ -22,8 +22,7 @@ import {
   BookingResponseDto,
 } from "../../dto/bookings/booking.dto";
 import { GetBarberAvailabilityDto } from "./dtos/booking.dto";
-import * as moment from 'moment';
-
+import * as moment from "moment";
 
 @Injectable()
 export class BookingsService {
@@ -212,7 +211,7 @@ export class BookingsService {
     return this.mapToResponseDto(booking);
   }
 
-  async getBookings(query, userId, userRole) {
+  async getBookings(query: BookingQueryDto, userId: string, userRole: string) {
     const {
       status,
       type,
@@ -251,22 +250,23 @@ export class BookingsService {
     const sort: any = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    const result = await this.bookingModel.aggregate([
-      { $match: filter },
-
-      // Convert string IDs → ObjectId
+    const basePipeline = [
       {
         $addFields: {
           customerId: { $toObjectId: "$customerId" },
           barberId: { $toObjectId: "$barberId" },
         },
       },
+      { $match: filter },
+    ];
 
+    // 🔹 Fetch bookings
+    const bookings = await this.bookingModel.aggregate([
+      ...basePipeline,
       { $sort: sort },
       { $skip: skip },
       { $limit: limit },
 
-      // Customer lookup
       {
         $lookup: {
           from: "users",
@@ -277,7 +277,6 @@ export class BookingsService {
       },
       { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
 
-      // Barber lookup
       {
         $lookup: {
           from: "barbers",
@@ -288,7 +287,6 @@ export class BookingsService {
       },
       { $unwind: { path: "$barber", preserveNullAndEmptyArrays: true } },
 
-      // Barber → User lookup
       {
         $lookup: {
           from: "users",
@@ -299,7 +297,6 @@ export class BookingsService {
       },
       { $unwind: { path: "$barberUser", preserveNullAndEmptyArrays: true } },
 
-      // Barber Services
       {
         $lookup: {
           from: "services",
@@ -310,10 +307,16 @@ export class BookingsService {
       },
     ]);
 
-    const total = await this.bookingModel.countDocuments(filter);
+    // 🔹 Count using SAME pipeline
+    const countResult = await this.bookingModel.aggregate([
+      ...basePipeline,
+      { $count: "total" },
+    ]);
+
+    const total = countResult[0]?.total || 0;
 
     return {
-      bookings: result,
+      bookings,
       total,
       page,
       limit,
@@ -668,75 +671,75 @@ export class BookingsService {
     }
   }
 
-async getAvailability(dto: GetBarberAvailabilityDto) {
-  const { barberId, date, duration } = dto;
+  async getAvailability(dto: GetBarberAvailabilityDto) {
+    const { barberId, date, duration } = dto;
 
-  const dayOfWeek = moment(date).format("dddd").toLowerCase();
+    const dayOfWeek = moment(date).format("dddd").toLowerCase();
 
-  // Fetch barber
-  const barber = await this.barberModel.findById(barberId).lean();
-  if (
-    !barber ||
-    !barber.availability ||
-    !barber.availability[dayOfWeek]?.isAvailable
-  ) {
-    return {
-      success: false,
-      message: "Barber not available on this day",
-      availableSlots: [],
-    };
-  }
-
-  const { startTime, endTime } = barber.availability[dayOfWeek];
-
-  const start = moment(`${date} ${startTime}`, "YYYY-MM-DD HH:mm");
-  const end = moment(`${date} ${endTime}`, "YYYY-MM-DD HH:mm");
-
-  // Fetch bookings for the day
-  const bookings = await this.bookingModel
-    .find({
-      barberId,
-      status: { $ne: "cancelled" },
-      scheduledAt: { $gte: start.toDate(), $lte: end.toDate() },
-    })
-    .lean();
-
-  // Precompute occupied slots with real durations
-  const occupiedSlots = bookings.map((booking) => {
-    const bookingStart = moment(booking.scheduledAt);
-    const totalDuration = booking.services.reduce(
-      (sum: number, s: any) => sum + s.duration,
-      0
-    );
-    const bookingEnd = bookingStart.clone().add(totalDuration, "minutes");
-    return { start: bookingStart, end: bookingEnd };
-  });
-
-  const slots: string[] = [];
-  const current = start.clone();
-
-  // Loop until the last possible slot that fits within endTime
-  while (current.isSameOrBefore(end.clone().subtract(duration, "minutes"))) {
-    const slotStart = current.clone();
-    const slotEnd = current.clone().add(duration, "minutes");
-
-    // Check if this slot overlaps with any existing booking
-    const isBooked = occupiedSlots.some((b) => {
-      return slotStart.isBefore(b.end) && slotEnd.isAfter(b.start);
-    });
-
-    if (!isBooked) {
-      slots.push(slotStart.format("HH:mm"));
+    // Fetch barber
+    const barber = await this.barberModel.findById(barberId).lean();
+    if (
+      !barber ||
+      !barber.availability ||
+      !barber.availability[dayOfWeek]?.isAvailable
+    ) {
+      return {
+        success: false,
+        message: "Barber not available on this day",
+        availableSlots: [],
+      };
     }
 
-    current.add(duration, "minutes"); // move to next slot
-  }
+    const { startTime, endTime } = barber.availability[dayOfWeek];
 
-  return {
-    success: true,
-    barberId,
-    date,
-    availableSlots: slots,
-  };
-}
+    const start = moment(`${date} ${startTime}`, "YYYY-MM-DD HH:mm");
+    const end = moment(`${date} ${endTime}`, "YYYY-MM-DD HH:mm");
+
+    // Fetch bookings for the day
+    const bookings = await this.bookingModel
+      .find({
+        barberId,
+        status: { $ne: "cancelled" },
+        scheduledAt: { $gte: start.toDate(), $lte: end.toDate() },
+      })
+      .lean();
+
+    // Precompute occupied slots with real durations
+    const occupiedSlots = bookings.map((booking) => {
+      const bookingStart = moment(booking.scheduledAt);
+      const totalDuration = booking.services.reduce(
+        (sum: number, s: any) => sum + s.duration,
+        0
+      );
+      const bookingEnd = bookingStart.clone().add(totalDuration, "minutes");
+      return { start: bookingStart, end: bookingEnd };
+    });
+
+    const slots: string[] = [];
+    const current = start.clone();
+
+    // Loop until the last possible slot that fits within endTime
+    while (current.isSameOrBefore(end.clone().subtract(duration, "minutes"))) {
+      const slotStart = current.clone();
+      const slotEnd = current.clone().add(duration, "minutes");
+
+      // Check if this slot overlaps with any existing booking
+      const isBooked = occupiedSlots.some((b) => {
+        return slotStart.isBefore(b.end) && slotEnd.isAfter(b.start);
+      });
+
+      if (!isBooked) {
+        slots.push(slotStart.format("HH:mm"));
+      }
+
+      current.add(duration, "minutes"); // move to next slot
+    }
+
+    return {
+      success: true,
+      barberId,
+      date,
+      availableSlots: slots,
+    };
+  }
 }
