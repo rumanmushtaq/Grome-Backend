@@ -42,6 +42,7 @@ import {
 import { ResponseDto } from "@/dto/response/response.dto";
 // import { OtpService } from "./otp.service";
 import { OtpService } from "./services/otp.service";
+import { EmailService } from "./services/email.service";
 
 @Injectable()
 export class AuthService {
@@ -52,6 +53,7 @@ export class AuthService {
     private refreshTokenModel: Model<RefreshTokenDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private emailService: EmailService,
     private readonly otpService: OtpService
   ) {}
 
@@ -429,21 +431,22 @@ export class AuthService {
         throw new NotFoundException(getUserNotFoundMessage(email));
       }
 
-      // const isOtpExists = await this.otpService.findOtpByEmail(email);
-      // if (isOtpExists) {
-      //   // If an OTP exists, resend it
-      //   await this.otpService.deleteOtp(isOtpExists.email, isOtpExists.otp);
-      // }
+      const isOtpExists = await this.otpService.findOtpByEmail(email);
 
-      // const { otp } = await this.otpService.createOtp(email);
+      if (isOtpExists) {
+        // If an OTP exists, resend it
+        await this.otpService.deleteOtp(isOtpExists.email, isOtpExists.otp);
+      }
 
-      // // Send email with otp
-      // await this.emailService.sendOTPEmail({
-      //   name: user.name,
-      //   to: email,
-      //   subject: 'Password Reset - CrowdGen AI',
-      //   otp,
-      // });
+      const { otp } = await this.otpService.createOtp(email);
+
+      // Send email with otp
+      await this.emailService.sendOTPEmail({
+        name: user.name,
+        to: email,
+        subject: "Password Reset - Groom",
+        otp,
+      });
 
       // Generate reset token
       const resetToken = uuidv4();
@@ -452,6 +455,7 @@ export class AuthService {
       // Store reset token
       user.passwordResetToken = resetToken;
       user.passwordResetExpires = resetTokenExpiry;
+
       await user.save();
 
       // TODO: Send email with reset link

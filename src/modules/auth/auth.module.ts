@@ -25,6 +25,7 @@ import { AuthResponseDto } from '../../dto/auth/auth.dto';
 import { ThreadEntity, ThreadSchema } from '@/schemas/thread.schema';
 import { DatabaseModule } from '../database/database.module';
 import { OtpService } from './services/otp.service';
+import { EmailService } from './services/email.service';
 
 @Module({
   imports: [
@@ -51,7 +52,6 @@ import { OtpService } from './services/otp.service';
   controllers: [AuthController],
   providers: [
     AuthService,
-    // OtpService,
     JwtStrategy,
     LocalStrategy,
     GoogleStrategy,
@@ -59,7 +59,8 @@ import { OtpService } from './services/otp.service';
     AppleStrategy,
     JwtAuthGuard,
     LocalAuthGuard,
-    OtpService
+    OtpService,
+    EmailService
   ],
   exports: [AuthService, JwtAuthGuard, LocalAuthGuard],
 })
