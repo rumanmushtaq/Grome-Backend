@@ -23,100 +23,188 @@ import {
 } from "../../dto/bookings/booking.dto";
 import { GetBarberAvailabilityDto } from "./dtos/booking.dto";
 import * as moment from "moment";
+import { InjectConnection } from "@nestjs/mongoose";
+import { Connection, ClientSession } from "mongoose";
+import { Logger } from "@nestjs/common";
+import { NotificationsService } from "../notifications/notifications.service";
+import {
+  NotificationChannel,
+  NotificationType,
+} from "@/schemas/notification.schema";
 
 @Injectable()
 export class BookingsService {
   constructor(
     @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Barber.name) private barberModel: Model<BarberDocument>
+    @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
+    @InjectConnection() private readonly connection: Connection,
+
+    private readonly notificationsService: NotificationsService
   ) {}
 
   async createBooking(
     customerId: string,
     createBookingDto: CreateBookingDto
   ): Promise<BookingResponseDto> {
-    const {
-      barberId,
-      services,
-      scheduledAt,
-      type,
-      location,
-      specialRequests,
-      customerNotes,
-      promoCodeId,
-    } = createBookingDto;
+    const session = await this.connection.startSession();
 
-    console.log("barberId", barberId);
-    // Validate barber exists and is active
-    const barber = await this.barberModel.findById(barberId);
-    console.log("barber", barber);
-    if (!barber || !barber.isActive) {
-      throw new NotFoundException("Barber not found or inactive");
-    }
+    try {
+      console.log(1);
+      session.startTransaction();
+      console.log(2);
 
-    // Validate customer exists
-    const customer = await this.userModel.findById(customerId);
-    if (!customer || !customer.isActive) {
-      throw new NotFoundException("Customer not found or inactive");
-    }
+      const {
+        barberId,
+        services,
+        scheduledAt,
+        type,
+        location,
+        specialRequests,
+        customerNotes,
+        promoCodeId,
+      } = createBookingDto;
+      console.log(3);
 
-    // Check if barber is available at the scheduled time
-    const isAvailable = await this.checkBarberAvailability(
-      barberId,
-      new Date(scheduledAt)
-    );
-    if (!isAvailable) {
-      throw new BadRequestException(
-        "Barber is not available at the scheduled time"
+      // 1️⃣ Validate barber
+      const barber = await this.barberModel
+        .findById(barberId)
+        .session(session)
+        .lean();
+      console.log(4);
+
+      if (!barber || !barber.isActive) {
+        throw new NotFoundException("Barber not found or inactive");
+      }
+      console.log(5);
+
+      // 2️⃣ Validate customer
+      const customer = await this.userModel
+        .findById(customerId)
+        .session(session)
+        .lean();
+      console.log(6);
+
+      if (!customer || !customer.isActive) {
+        throw new NotFoundException("Customer not found or inactive");
+      }
+      console.log(6);
+
+      // 3️⃣ Validate schedule
+      const scheduledDate = new Date(scheduledAt);
+      if (isNaN(scheduledDate.getTime())) {
+        throw new BadRequestException("Invalid scheduled date");
+      }
+      console.log(7);
+
+      const isAvailable = await this.checkBarberAvailability(
+        barberId,
+        scheduledDate,
+        session // 👈 pass session inside
       );
+      console.log(8);
+
+      if (!isAvailable) {
+        throw new BadRequestException(
+          "Barber is not available at the scheduled time"
+        );
+      }
+      console.log(9);
+
+      // 4️⃣ Validate services
+      if (!services || services.length === 0) {
+        throw new BadRequestException("At least one service is required");
+      }
+      console.log(10);
+
+      const totalAmount = services.reduce(
+        (sum, service) => sum + service.price,
+        0
+      );
+      console.log(11);
+
+      if (totalAmount <= 0) {
+        throw new BadRequestException("Invalid service pricing");
+      }
+      console.log(12);
+
+      const commission = totalAmount * barber.commissionRate;
+      const payoutAmount = totalAmount - commission;
+      console.log(13);
+
+      // 5️⃣ Create booking (transactional)
+      const booking = await this.bookingModel.create(
+        [
+          {
+            customerId,
+            barberId,
+            services,
+            scheduledAt: scheduledDate,
+            type,
+            location: location
+              ? {
+                  type: "Point",
+                  coordinates: [location.longitude, location.latitude],
+                  address: location.address,
+                  city: location.city,
+                  postalCode: location.postalCode,
+                  country: location.country,
+                }
+              : undefined,
+            specialRequests,
+            customerNotes,
+            promoCodeId,
+            payment: {
+              status: "pending",
+              amount: totalAmount,
+              currency: "USD",
+              commission,
+              payoutAmount,
+            },
+            source: "mobile_app",
+          },
+        ],
+        { session }
+      );
+      console.log(14);
+
+      // 🔜 Future transactional steps:
+      // - Reserve barber slot
+      // - Apply promo code
+      // - Debit wallet / pre-authorize payment
+
+      await session.commitTransaction();
+
+      console.log(15);
+
+      // 🔔 Side effects AFTER commit
+      this.sendBookingNotifications(booking[0]).catch((err) =>
+        // this.logger.error("Notification failed", err)
+        console.log("errors", err)
+      );
+      console.log(16);
+
+
+
+      return this.mapToResponseDto(booking[0]);
+    } catch (error) {
+      await session.abortTransaction();
+
+      // this.logger.error("Create booking transaction failed", error);
+
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(
+        "Unable to create booking at this time"
+      );
+    } finally {
+      session.endSession();
     }
-
-    // Calculate total amount
-    const totalAmount = services.reduce(
-      (sum, service) => sum + service.price,
-      0
-    );
-    const commission = totalAmount * barber.commissionRate;
-    const payoutAmount = totalAmount - commission;
-
-    // Create booking
-    const booking = new this.bookingModel({
-      customerId,
-      barberId,
-      services,
-      scheduledAt: new Date(scheduledAt),
-      type,
-      location: location
-        ? {
-            type: "Point",
-            coordinates: [location.longitude, location.latitude],
-            address: location.address,
-            city: location.city,
-            postalCode: location.postalCode,
-            country: location.country,
-          }
-        : undefined,
-      specialRequests,
-      customerNotes,
-      promoCodeId,
-      payment: {
-        status: "pending",
-        amount: totalAmount,
-        currency: "USD",
-        commission,
-        payoutAmount,
-      },
-      source: "mobile_app",
-    });
-
-    await booking.save();
-
-    // TODO: Send notifications to barber
-    // TODO: Process payment if instant booking
-    // TODO: Apply promo code if provided
-
-    return this.mapToResponseDto(booking);
   }
 
   async updateBooking(
@@ -414,7 +502,8 @@ export class BookingsService {
 
   private async checkBarberAvailability(
     barberId: string,
-    scheduledAt: Date
+    scheduledAt: Date,
+      session?: ClientSession
   ): Promise<boolean> {
     // Check if there are any conflicting bookings
     const conflictingBooking = await this.bookingModel.findOne({
@@ -430,46 +519,99 @@ export class BookingsService {
           BookingStatus.IN_PROGRESS,
         ],
       },
-    });
+    }).session(session).lean(); // ✅ safe & recommended
 
     return !conflictingBooking;
   }
 
-  private mapToResponseDto(booking: BookingDocument): BookingResponseDto {
+  // private mapToResponseDto(booking: BookingDocument): BookingResponseDto {
+  //   return {
+  //     id: booking._id.toString(),
+  //     customerId: booking.customerId.toString(),
+  //     barberId: booking.barberId.toString(),
+  //     services: booking.services.map((service) => ({
+  //       ...service,
+  //       serviceId: service.serviceId.toString(),
+  //     })),
+  //     scheduledAt: booking.scheduledAt,
+  //     status: booking.status,
+  //     type: booking.type,
+  //     location: booking.location,
+  //     eta: booking.eta,
+  //     startedAt: booking.startedAt,
+  //     completedAt: booking.completedAt,
+  //     cancelledAt: booking.cancelledAt,
+  //     cancellationReason: booking.cancellationReason,
+  //     payment: booking.payment,
+  //     specialRequests: booking.specialRequests,
+  //     customerNotes: booking.customerNotes,
+  //     barberNotes: booking.barberNotes,
+  //     promoCodeId: booking.promoCodeId?.toString(),
+  //     discountAmount: booking.discountAmount,
+  //     customerRating: booking.customerRating,
+  //     customerReview: booking.customerReview,
+  //     barberRating: booking.barberRating,
+  //     barberReview: booking.barberReview,
+  //     conversationId: booking.conversationId?.toString(),
+  //     source: booking.source,
+  //     isRecurring: booking.isRecurring,
+  //     recurringPattern: booking.recurringPattern,
+  //     recurringEndDate: booking.recurringEndDate,
+  //     createdAt: (booking as any).createdAt,
+  //     updatedAt: (booking as any).updatedAt,
+  //   };
+  // }
+
+  private mapToResponseDto(booking: any): BookingResponseDto {
     return {
       id: booking._id.toString(),
       customerId: booking.customerId.toString(),
       barberId: booking.barberId.toString(),
+
       services: booking.services.map((service) => ({
-        ...service,
         serviceId: service.serviceId.toString(),
+        price: service.price,
+        duration: service.duration,
+        name: service.name,
       })),
+
       scheduledAt: booking.scheduledAt,
       status: booking.status,
       type: booking.type,
-      location: booking.location,
+
+      location: booking.location ? { ...booking.location } : null,
+
       eta: booking.eta,
       startedAt: booking.startedAt,
       completedAt: booking.completedAt,
       cancelledAt: booking.cancelledAt,
       cancellationReason: booking.cancellationReason,
-      payment: booking.payment,
+
+      payment: booking.payment ? { ...booking.payment } : null,
+
       specialRequests: booking.specialRequests,
       customerNotes: booking.customerNotes,
       barberNotes: booking.barberNotes,
+
       promoCodeId: booking.promoCodeId?.toString(),
       discountAmount: booking.discountAmount,
+
       customerRating: booking.customerRating,
       customerReview: booking.customerReview,
       barberRating: booking.barberRating,
       barberReview: booking.barberReview,
+
       conversationId: booking.conversationId?.toString(),
+
       source: booking.source,
       isRecurring: booking.isRecurring,
+
       recurringPattern: booking.recurringPattern,
+
       recurringEndDate: booking.recurringEndDate,
-      createdAt: (booking as any).createdAt,
-      updatedAt: (booking as any).updatedAt,
+
+      createdAt: booking.createdAt,
+      updatedAt: booking.updatedAt,
     };
   }
 
@@ -741,5 +883,46 @@ export class BookingsService {
       date,
       availableSlots: slots,
     };
+  }
+
+  private async sendBookingNotifications(
+    booking: BookingDocument
+  ): Promise<void> {
+    try {
+      const bookingId = booking._id.toString();
+
+      const payload = {
+        bookingId,
+        scheduledAt: booking.scheduledAt,
+        type: booking.type,
+      };
+
+      // ==========================
+      // 🔔 CUSTOMER NOTIFICATION
+      // ==========================
+      await this.notificationsService.createNotification({
+        userId: booking.customerId.toString(),
+        type: NotificationType.BOOKING_CREATED,
+        channel: NotificationChannel.IN_APP,
+        title: "Booking Confirmed",
+        body: "Your booking has been successfully created.",
+        data: payload,
+      });
+
+      // ==========================
+      // 💈 BARBER NOTIFICATION
+      // ==========================
+      await this.notificationsService.createNotification({
+        userId: booking.barberId.toString(),
+        type: NotificationType.BOOKING_CREATED,
+        channel: NotificationChannel.IN_APP,
+        title: "New Booking Request",
+        body: "You have received a new booking request.",
+        data: payload,
+      });
+    } catch (error) {
+      // 🔕 Never break booking flow
+      console.error("Failed to send booking notifications", error);
+    }
   }
 }

@@ -1,63 +1,68 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type NotificationDocument = Notification & Document;
 
 export enum NotificationType {
-  
   //////Bookings
-  BOOKING_CREATED = 'booking_created',
-  BOOKING_ACCEPTED = 'booking_accepted',
-  BOOKING_CANCELLED = 'booking_cancelled',
-  BOOKING_COMPLETED = 'booking_completed',
-  BOOKING_REMINDER = 'booking_reminder',
+  BOOKING_CREATED = "booking_created",
+  BOOKING_ACCEPTED = "booking_accepted",
+  BOOKING_CANCELLED = "booking_cancelled",
+  BOOKING_COMPLETED = "booking_completed",
+  BOOKING_REMINDER = "booking_reminder",
 
-/////Payment
-  PAYMENT_SUCCESS = 'payment_success',
-  PAYMENT_FAILED = 'payment_failed',
+  /////Payment
+  PAYMENT_SUCCESS = "payment_success",
+  PAYMENT_FAILED = "payment_failed",
 
   ////Message
-  MESSAGE_RECEIVED = 'message_received',
-  REVIEW_REQUEST = 'review_request',
-  PROMO_CODE = 'promo_code',
-  SYSTEM_UPDATE = 'system_update',
-  BARBER_VERIFICATION = 'barber_verification',
-  WALLET_TRANSACTION = 'wallet_transaction',
+  MESSAGE_RECEIVED = "message_received",
+  REVIEW_REQUEST = "review_request",
+  PROMO_CODE = "promo_code",
+  SYSTEM_UPDATE = "system_update",
+  BARBER_VERIFICATION = "barber_verification",
+  WALLET_TRANSACTION = "wallet_transaction",
 }
 
 export enum NotificationChannel {
-  PUSH = 'push',
-  EMAIL = 'email',
-  SMS = 'sms',
-  IN_APP = 'in_app',
+  PUSH = "push",
+  EMAIL = "email",
+  SMS = "sms",
+  IN_APP = "in_app",
 }
 
 export enum NotificationStatus {
-  PENDING = 'pending',
-  SENT = 'sent',
-  DELIVERED = 'delivered',
-  READ = 'read',
-  FAILED = 'failed',
+  PENDING = "pending",
+  SENT = "sent",
+  DELIVERED = "delivered",
+  READ = "read",
+  FAILED = "failed",
+}
+
+export enum NotificationRecipientRole {
+  CUSTOMER = "customer",
+  BARBER = "barber",
+  ADMIN = "admin",
 }
 
 @Schema({ timestamps: true })
 export class Notification {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true, index: true })
   userId: Types.ObjectId;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(NotificationType), 
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationType),
     required: true,
-    index: true 
+    index: true,
   })
   type: NotificationType;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(NotificationChannel), 
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationChannel),
     required: true,
-    index: true 
+    index: true,
   })
   channel: NotificationChannel;
 
@@ -70,11 +75,11 @@ export class Notification {
   @Prop({ type: Object })
   data?: Record<string, any>; // Additional data payload
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(NotificationStatus), 
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationStatus),
     default: NotificationStatus.PENDING,
-    index: true 
+    index: true,
   })
   status: NotificationStatus;
 
@@ -83,6 +88,9 @@ export class Notification {
 
   @Prop()
   deliveredAt?: Date;
+
+  @Prop({ default: false, index: true })
+  isRead: boolean;
 
   @Prop()
   readAt?: Date;
@@ -94,13 +102,13 @@ export class Notification {
   failureReason?: string;
 
   // Related entities
-  @Prop({ type: Types.ObjectId, ref: 'Booking' })
+  @Prop({ type: Types.ObjectId, ref: "Booking" })
   bookingId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Conversation' })
+  @Prop({ type: Types.ObjectId, ref: "Conversation" })
   conversationId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: Types.ObjectId, ref: "User" })
   fromUserId?: Types.ObjectId;
 
   // Notification settings
@@ -175,6 +183,13 @@ export class Notification {
 
   @Prop({ type: Object })
   metadata?: Record<string, any>; // Additional metadata for analytics
+
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationRecipientRole),
+    index: true,
+  })
+  recipientRole: NotificationRecipientRole;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
