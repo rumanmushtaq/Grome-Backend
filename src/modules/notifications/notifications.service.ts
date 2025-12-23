@@ -246,6 +246,7 @@ export class NotificationsService {
     unreadOnly = false
   ) {
     const skip = (page - 1) * limit;
+
     const filter: any = { userId };
 
     if (unreadOnly) {
@@ -259,7 +260,9 @@ export class NotificationsService {
         .find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(), // 🔥 important
+
       this.notificationModel.countDocuments(filter),
     ]);
 
@@ -271,6 +274,7 @@ export class NotificationsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
+        unreadOnly,
       },
     };
   }
