@@ -184,8 +184,6 @@ export class BookingsService {
       );
       console.log(16);
 
-
-
       return this.mapToResponseDto(booking[0]);
     } catch (error) {
       await session.abortTransaction();
@@ -299,6 +297,120 @@ export class BookingsService {
     return this.mapToResponseDto(booking);
   }
 
+  // async getBookings(query: BookingQueryDto, userId: string, userRole: string) {
+  //   console.log("i am valling")
+  //   const {
+  //     status,
+  //     type,
+  //     startDate,
+  //     endDate,
+  //     barberId,
+  //     customerId,
+  //     page = 1,
+  //     limit = 10,
+  //     sortBy = "scheduledAt",
+  //     sortOrder = "desc",
+  //   } = query;
+
+  //   const filter: any = {};
+
+  //   // Role-based filtering
+  //   if (userRole === "customer") filter.customerId = new Types.ObjectId(userId);
+  //   if (userRole === "barber") filter.barberId = new Types.ObjectId(userId);
+  //   if (userRole === "admin") {
+  //     if (barberId) filter.barberId = new Types.ObjectId(barberId);
+  //     if (customerId) filter.customerId = new Types.ObjectId(customerId);
+  //   }
+
+  //   if (status) filter.status = status;
+  //   if (type) filter.type = type;
+
+  //   if (startDate) filter.scheduledAt = { $gte: new Date(startDate) };
+  //   if (endDate)
+  //     filter.scheduledAt = {
+  //       ...filter.scheduledAt,
+  //       $lte: new Date(endDate),
+  //     };
+
+  //   const skip = (page - 1) * limit;
+
+  //   const sort: any = {};
+  //   sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+  //   const basePipeline = [
+  //     // {
+  //     //   $addFields: {
+  //     //     customerId: { $toObjectId: "$customerId" },
+  //     //     barberId: { $toObjectId: "$barberId" },
+  //     //   },
+  //     // },
+  //     { $match: filter },
+  //   ];
+
+  //   // 🔹 Fetch bookings
+  //   const bookings = await this.bookingModel.aggregate([
+  //     ...basePipeline,
+  //     { $sort: sort },
+  //     { $skip: skip },
+  //     { $limit: limit },
+
+  //     {
+  //       $lookup: {
+  //         from: "users",
+  //         localField: "customerId",
+  //         foreignField: "_id",
+  //         as: "customer",
+  //       },
+  //     },
+  //     { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
+
+  //     {
+  //       $lookup: {
+  //         from: "barbers",
+  //         localField: "barberId",
+  //         foreignField: "_id",
+  //         as: "barber",
+  //       },
+  //     },
+  //     { $unwind: { path: "$barber", preserveNullAndEmptyArrays: true } },
+
+  //     {
+  //       $lookup: {
+  //         from: "users",
+  //         localField: "barber.userId",
+  //         foreignField: "_id",
+  //         as: "barberUser",
+  //       },
+  //     },
+  //     { $unwind: { path: "$barberUser", preserveNullAndEmptyArrays: true } },
+
+  //     {
+  //       $lookup: {
+  //         from: "services",
+  //         localField: "services.serviceId",
+  //         foreignField: "_id",
+  //         as: "bookingServices",
+  //       },
+  //     },
+  //   ]);
+
+  //   // 🔹 Count using SAME pipeline
+  //   const countResult = await this.bookingModel.aggregate([
+  //     ...basePipeline,
+  //     { $count: "total" },
+  //   ]);
+
+  //   const total = countResult[0]?.total || 0;
+
+  //   return {
+  //     bookings,
+  //     total,
+  //     page,
+  //     limit,
+  //     totalPages: Math.ceil(total / limit),
+  //   };
+  // }
+
   async getBookings(query: BookingQueryDto, userId: string, userRole: string) {
     const {
       status,
@@ -313,48 +425,65 @@ export class BookingsService {
       sortOrder = "desc",
     } = query;
 
+    console.log("userId", userId);
+    console.log("userRole", userRole);
+
     const filter: any = {};
 
-    // Role-based filtering
-    if (userRole === "customer") filter.customerId = new Types.ObjectId(userId);
-    if (userRole === "barber") filter.barberId = new Types.ObjectId(userId);
+    // 🔥 FIXED BARBER LOGIC
+    if (userRole === "barber") {
+      const barber = await this.barberModel.findOne({
+        userId: new Types.ObjectId(userId),
+      });
+
+      if (!barber) {
+        throw new Error("Barber not found");
+      }
+
+      filter.barberId = barber._id.toString();
+    }
+
+    // ✅ Role-based filtering
+    if (userRole === "customer") {
+      filter.customerId = userId.toString();
+    }
+
     if (userRole === "admin") {
       if (barberId) filter.barberId = new Types.ObjectId(barberId);
       if (customerId) filter.customerId = new Types.ObjectId(customerId);
     }
 
+    // ✅ Optional filters
     if (status) filter.status = status;
     if (type) filter.type = type;
 
-    if (startDate) filter.scheduledAt = { $gte: new Date(startDate) };
-    if (endDate)
-      filter.scheduledAt = {
-        ...filter.scheduledAt,
-        $lte: new Date(endDate),
-      };
+    // ✅ Date filter (safe)
+    if (startDate || endDate) {
+      filter.scheduledAt = {};
+      if (startDate)
+        filter.scheduledAt.$gte = new Date(startDate + "T00:00:00.000Z");
+      if (endDate)
+        filter.scheduledAt.$lte = new Date(endDate + "T23:59:59.999Z");
+    }
 
     const skip = (page - 1) * limit;
 
     const sort: any = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    const basePipeline = [
-      {
-        $addFields: {
-          customerId: { $toObjectId: "$customerId" },
-          barberId: { $toObjectId: "$barberId" },
-        },
-      },
-      { $match: filter },
-    ];
+    console.log("filter", filter);
 
-    // 🔹 Fetch bookings
+    // ===============================
+    // 🔹 MAIN AGGREGATION
+    // ===============================
     const bookings = await this.bookingModel.aggregate([
-      ...basePipeline,
+      { $match: filter },
+
       { $sort: sort },
       { $skip: skip },
       { $limit: limit },
 
+      // 👤 Customer
       {
         $lookup: {
           from: "users",
@@ -365,6 +494,7 @@ export class BookingsService {
       },
       { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
 
+      // 💈 Barber
       {
         $lookup: {
           from: "barbers",
@@ -375,6 +505,7 @@ export class BookingsService {
       },
       { $unwind: { path: "$barber", preserveNullAndEmptyArrays: true } },
 
+      // 👤 Barber User
       {
         $lookup: {
           from: "users",
@@ -385,19 +516,30 @@ export class BookingsService {
       },
       { $unwind: { path: "$barberUser", preserveNullAndEmptyArrays: true } },
 
+      // 🧾 Services (FIXED)
       {
         $lookup: {
           from: "services",
-          localField: "services.serviceId",
-          foreignField: "_id",
+          let: { serviceIds: "$services.serviceId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ["$_id", "$$serviceIds"],
+                },
+              },
+            },
+          ],
           as: "bookingServices",
         },
       },
     ]);
 
-    // 🔹 Count using SAME pipeline
+    // ===============================
+    // 🔹 COUNT QUERY
+    // ===============================
     const countResult = await this.bookingModel.aggregate([
-      ...basePipeline,
+      { $match: filter },
       { $count: "total" },
     ]);
 
@@ -503,23 +645,26 @@ export class BookingsService {
   private async checkBarberAvailability(
     barberId: string,
     scheduledAt: Date,
-      session?: ClientSession
+    session?: ClientSession
   ): Promise<boolean> {
     // Check if there are any conflicting bookings
-    const conflictingBooking = await this.bookingModel.findOne({
-      barberId,
-      scheduledAt: {
-        $gte: new Date(scheduledAt.getTime() - 30 * 60 * 1000), // 30 minutes before
-        $lte: new Date(scheduledAt.getTime() + 30 * 60 * 1000), // 30 minutes after
-      },
-      status: {
-        $in: [
-          BookingStatus.REQUESTED,
-          BookingStatus.ACCEPTED,
-          BookingStatus.IN_PROGRESS,
-        ],
-      },
-    }).session(session).lean(); // ✅ safe & recommended
+    const conflictingBooking = await this.bookingModel
+      .findOne({
+        barberId,
+        scheduledAt: {
+          $gte: new Date(scheduledAt.getTime() - 30 * 60 * 1000), // 30 minutes before
+          $lte: new Date(scheduledAt.getTime() + 30 * 60 * 1000), // 30 minutes after
+        },
+        status: {
+          $in: [
+            BookingStatus.REQUESTED,
+            BookingStatus.ACCEPTED,
+            BookingStatus.IN_PROGRESS,
+          ],
+        },
+      })
+      .session(session)
+      .lean(); // ✅ safe & recommended
 
     return !conflictingBooking;
   }
