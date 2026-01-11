@@ -183,6 +183,7 @@ export class BookingsService {
         console.log("errors", err)
       );
       console.log(16);
+      console.log("booking creating", booking);
 
       return this.mapToResponseDto(booking[0]);
     } catch (error) {
@@ -707,24 +708,90 @@ export class BookingsService {
   //   };
   // }
 
+  // private mapToResponseDto(booking: any): BookingResponseDto {
+  //   return {
+  //     id: booking._id.toString(),
+  //     customerId: booking.customerId.toString(),
+  //     barberId: booking.barberId.toString(),
+
+  //     services: booking.services.map((service) => ({
+  //       serviceId: service.serviceId.toString(),
+  //       price: service.price,
+  //       duration: service.duration,
+  //       name: service.name,
+  //     })),
+
+  //     scheduledAt: booking.scheduledAt,
+  //     status: booking.status,
+  //     type: booking.type,
+
+  //     location: booking.location ? { ...booking.location } : null,
+
+  //     eta: booking.eta,
+  //     startedAt: booking.startedAt,
+  //     completedAt: booking.completedAt,
+  //     cancelledAt: booking.cancelledAt,
+  //     cancellationReason: booking.cancellationReason,
+
+  //     payment: booking.payment ? { ...booking.payment } : null,
+
+  //     specialRequests: booking.specialRequests,
+  //     customerNotes: booking.customerNotes,
+  //     barberNotes: booking.barberNotes,
+
+  //     promoCodeId: booking.promoCodeId?.toString(),
+  //     discountAmount: booking.discountAmount,
+
+  //     customerRating: booking.customerRating,
+  //     customerReview: booking.customerReview,
+  //     barberRating: booking.barberRating,
+  //     barberReview: booking.barberReview,
+
+  //     conversationId: booking.conversationId?.toString(),
+
+  //     source: booking.source,
+  //     isRecurring: booking.isRecurring,
+
+  //     recurringPattern: booking.recurringPattern,
+
+  //     recurringEndDate: booking.recurringEndDate,
+
+  //     createdAt: booking.createdAt,
+  //     updatedAt: booking.updatedAt,
+  //   };
+  // }
+
   private mapToResponseDto(booking: any): BookingResponseDto {
     return {
-      id: booking._id.toString(),
-      customerId: booking.customerId.toString(),
-      barberId: booking.barberId.toString(),
+      id: booking._id?.toString(),
 
-      services: booking.services.map((service) => ({
-        serviceId: service.serviceId.toString(),
-        price: service.price,
-        duration: service.duration,
-        name: service.name,
-      })),
+      customerId:
+        typeof booking.customerId === "string"
+          ? booking.customerId
+          : booking.customerId?.toString(),
+
+      barberId:
+        typeof booking.barberId === "string"
+          ? booking.barberId
+          : booking.barberId?.toString(),
+
+      services: Array.isArray(booking.services)
+        ? booking.services.map((service) => ({
+            serviceId:
+              typeof service.serviceId === "string"
+                ? service.serviceId
+                : service.serviceId?.toString(),
+            price: service.price,
+            duration: service.duration,
+            name: service.name,
+          }))
+        : [],
 
       scheduledAt: booking.scheduledAt,
       status: booking.status,
       type: booking.type,
 
-      location: booking.location ? { ...booking.location } : null,
+      location: booking.location ?? null,
 
       eta: booking.eta,
       startedAt: booking.startedAt,
@@ -732,13 +799,17 @@ export class BookingsService {
       cancelledAt: booking.cancelledAt,
       cancellationReason: booking.cancellationReason,
 
-      payment: booking.payment ? { ...booking.payment } : null,
+      payment: booking.payment ?? null,
 
       specialRequests: booking.specialRequests,
       customerNotes: booking.customerNotes,
       barberNotes: booking.barberNotes,
 
-      promoCodeId: booking.promoCodeId?.toString(),
+      promoCodeId:
+        typeof booking.promoCodeId === "string"
+          ? booking.promoCodeId
+          : booking.promoCodeId?.toString(),
+
       discountAmount: booking.discountAmount,
 
       customerRating: booking.customerRating,
@@ -746,13 +817,15 @@ export class BookingsService {
       barberRating: booking.barberRating,
       barberReview: booking.barberReview,
 
-      conversationId: booking.conversationId?.toString(),
+      conversationId:
+        typeof booking.conversationId === "string"
+          ? booking.conversationId
+          : booking.conversationId?.toString(),
 
       source: booking.source,
       isRecurring: booking.isRecurring,
 
       recurringPattern: booking.recurringPattern,
-
       recurringEndDate: booking.recurringEndDate,
 
       createdAt: booking.createdAt,
