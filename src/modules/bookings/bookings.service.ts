@@ -187,6 +187,7 @@ export class BookingsService {
 
       return this.mapToResponseDto(booking[0]);
     } catch (error) {
+      console.log("error in booking creation", error);
       await session.abortTransaction();
 
       // this.logger.error("Create booking transaction failed", error);
