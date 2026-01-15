@@ -43,169 +43,283 @@ export class BookingsService {
     private readonly notificationsService: NotificationsService
   ) {}
 
+  // async createBooking(
+  //   customerId: string,
+  //   createBookingDto: CreateBookingDto
+  // ): Promise<BookingResponseDto> {
+  //   const session = await this.connection.startSession();
+
+  //   try {
+  //     console.log(1);
+  //     session.startTransaction();
+  //     console.log(2);
+
+  //     const {
+  //       barberId,
+  //       services,
+  //       scheduledAt,
+  //       type,
+  //       location,
+  //       specialRequests,
+  //       customerNotes,
+  //       promoCodeId,
+  //     } = createBookingDto;
+  //     console.log(3);
+
+  //     // 1️⃣ Validate barber
+  //     const barber = await this.barberModel
+  //       .findById(barberId)
+  //       .session(session)
+  //       .lean();
+  //     console.log(4);
+
+  //     if (!barber || !barber.isActive) {
+  //       throw new NotFoundException("Barber not found or inactive");
+  //     }
+  //     console.log(5);
+
+  //     // 2️⃣ Validate customer
+  //     const customer = await this.userModel
+  //       .findById(customerId)
+  //       .session(session)
+  //       .lean();
+  //     console.log(6);
+
+  //     if (!customer || !customer.isActive) {
+  //       throw new NotFoundException("Customer not found or inactive");
+  //     }
+  //     console.log(6);
+
+  //     // 3️⃣ Validate schedule
+  //     const scheduledDate = new Date(scheduledAt);
+  //     if (isNaN(scheduledDate.getTime())) {
+  //       throw new BadRequestException("Invalid scheduled date");
+  //     }
+  //     console.log(7);
+
+  //     const isAvailable = await this.checkBarberAvailability(
+  //       barberId,
+  //       scheduledDate,
+  //       session // 👈 pass session inside
+  //     );
+  //     console.log(8);
+
+  //     if (!isAvailable) {
+  //       throw new BadRequestException(
+  //         "Barber is not available at the scheduled time"
+  //       );
+  //     }
+  //     console.log(9);
+
+  //     // 4️⃣ Validate services
+  //     if (!services || services.length === 0) {
+  //       throw new BadRequestException("At least one service is required");
+  //     }
+  //     console.log(10);
+
+  //     const totalAmount = services.reduce(
+  //       (sum, service) => sum + service.price,
+  //       0
+  //     );
+  //     console.log(11);
+
+  //     if (totalAmount <= 0) {
+  //       throw new BadRequestException("Invalid service pricing");
+  //     }
+  //     console.log(12);
+
+  //     const commission = totalAmount * barber.commissionRate;
+  //     const payoutAmount = totalAmount - commission;
+  //     console.log(13);
+
+  //     // 5️⃣ Create booking (transactional)
+  //     const booking = await this.bookingModel.create(
+  //       [
+  //         {
+  //           customerId,
+  //           barberId,
+  //           services,
+  //           scheduledAt: scheduledDate,
+  //           type,
+  //           location: location
+  //             ? {
+  //                 type: "Point",
+  //                 coordinates: [location.longitude, location.latitude],
+  //                 address: location.address,
+  //                 city: location.city,
+  //                 postalCode: location.postalCode,
+  //                 country: location.country,
+  //               }
+  //             : undefined,
+  //           specialRequests,
+  //           customerNotes,
+  //           promoCodeId,
+  //           payment: {
+  //             status: "pending",
+  //             amount: totalAmount,
+  //             currency: "USD",
+  //             commission,
+  //             payoutAmount,
+  //           },
+  //           source: "mobile_app",
+  //         },
+  //       ],
+  //       { session }
+  //     );
+  //     console.log(14);
+
+  //     // 🔜 Future transactional steps:
+  //     // - Reserve barber slot
+  //     // - Apply promo code
+  //     // - Debit wallet / pre-authorize payment
+
+  //     await session.commitTransaction();
+
+  //     console.log(15);
+
+  //     // 🔔 Side effects AFTER commit
+  //     this.sendBookingNotifications(booking[0]).catch((err) =>
+  //       // this.logger.error("Notification failed", err)
+  //       console.log("errors", err)
+  //     );
+  //     console.log(16);
+  //     console.log("booking creating", booking);
+
+  //     return this.mapToResponseDto(booking[0]);
+  //   } catch (error) {
+  //     console.log("error in booking creation", error);
+  //     await session.abortTransaction();
+
+  //     // this.logger.error("Create booking transaction failed", error);
+
+  //     if (
+  //       error instanceof BadRequestException ||
+  //       error instanceof NotFoundException
+  //     ) {
+  //       throw error;
+  //     }
+
+  //     throw new InternalServerErrorException(
+  //       "Unable to create booking at this time"
+  //     );
+  //   } finally {
+  //     session.endSession();
+  //   }
+  // }
+
   async createBooking(
-    customerId: string,
-    createBookingDto: CreateBookingDto
-  ): Promise<BookingResponseDto> {
-    const session = await this.connection.startSession();
+  customerId: string,
+  createBookingDto: CreateBookingDto
+): Promise<BookingResponseDto> {
+  try {
+    const {
+      barberId,
+      services,
+      scheduledAt,
+      type,
+      location,
+      specialRequests,
+      customerNotes,
+      promoCodeId,
+    } = createBookingDto;
 
-    try {
-      console.log(1);
-      session.startTransaction();
-      console.log(2);
-
-      const {
-        barberId,
-        services,
-        scheduledAt,
-        type,
-        location,
-        specialRequests,
-        customerNotes,
-        promoCodeId,
-      } = createBookingDto;
-      console.log(3);
-
-      // 1️⃣ Validate barber
-      const barber = await this.barberModel
-        .findById(barberId)
-        .session(session)
-        .lean();
-      console.log(4);
-
-      if (!barber || !barber.isActive) {
-        throw new NotFoundException("Barber not found or inactive");
-      }
-      console.log(5);
-
-      // 2️⃣ Validate customer
-      const customer = await this.userModel
-        .findById(customerId)
-        .session(session)
-        .lean();
-      console.log(6);
-
-      if (!customer || !customer.isActive) {
-        throw new NotFoundException("Customer not found or inactive");
-      }
-      console.log(6);
-
-      // 3️⃣ Validate schedule
-      const scheduledDate = new Date(scheduledAt);
-      if (isNaN(scheduledDate.getTime())) {
-        throw new BadRequestException("Invalid scheduled date");
-      }
-      console.log(7);
-
-      const isAvailable = await this.checkBarberAvailability(
-        barberId,
-        scheduledDate,
-        session // 👈 pass session inside
-      );
-      console.log(8);
-
-      if (!isAvailable) {
-        throw new BadRequestException(
-          "Barber is not available at the scheduled time"
-        );
-      }
-      console.log(9);
-
-      // 4️⃣ Validate services
-      if (!services || services.length === 0) {
-        throw new BadRequestException("At least one service is required");
-      }
-      console.log(10);
-
-      const totalAmount = services.reduce(
-        (sum, service) => sum + service.price,
-        0
-      );
-      console.log(11);
-
-      if (totalAmount <= 0) {
-        throw new BadRequestException("Invalid service pricing");
-      }
-      console.log(12);
-
-      const commission = totalAmount * barber.commissionRate;
-      const payoutAmount = totalAmount - commission;
-      console.log(13);
-
-      // 5️⃣ Create booking (transactional)
-      const booking = await this.bookingModel.create(
-        [
-          {
-            customerId,
-            barberId,
-            services,
-            scheduledAt: scheduledDate,
-            type,
-            location: location
-              ? {
-                  type: "Point",
-                  coordinates: [location.longitude, location.latitude],
-                  address: location.address,
-                  city: location.city,
-                  postalCode: location.postalCode,
-                  country: location.country,
-                }
-              : undefined,
-            specialRequests,
-            customerNotes,
-            promoCodeId,
-            payment: {
-              status: "pending",
-              amount: totalAmount,
-              currency: "USD",
-              commission,
-              payoutAmount,
-            },
-            source: "mobile_app",
-          },
-        ],
-        { session }
-      );
-      console.log(14);
-
-      // 🔜 Future transactional steps:
-      // - Reserve barber slot
-      // - Apply promo code
-      // - Debit wallet / pre-authorize payment
-
-      await session.commitTransaction();
-
-      console.log(15);
-
-      // 🔔 Side effects AFTER commit
-      this.sendBookingNotifications(booking[0]).catch((err) =>
-        // this.logger.error("Notification failed", err)
-        console.log("errors", err)
-      );
-      console.log(16);
-      console.log("booking creating", booking);
-
-      return this.mapToResponseDto(booking[0]);
-    } catch (error) {
-      console.log("error in booking creation", error);
-      await session.abortTransaction();
-
-      // this.logger.error("Create booking transaction failed", error);
-
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(
-        "Unable to create booking at this time"
-      );
-    } finally {
-      session.endSession();
+    // 1️⃣ Validate barber
+    const barber = await this.barberModel.findById(barberId).lean();
+    if (!barber || !barber.isActive) {
+      throw new NotFoundException("Barber not found or inactive");
     }
+
+    // 2️⃣ Validate customer
+    const customer = await this.userModel.findById(customerId).lean();
+    if (!customer || !customer.isActive) {
+      throw new NotFoundException("Customer not found or inactive");
+    }
+
+    // 3️⃣ Validate schedule
+    const scheduledDate = new Date(scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      throw new BadRequestException("Invalid scheduled date");
+    }
+
+    const isAvailable = await this.checkBarberAvailability(
+      barberId,
+      scheduledDate
+    );
+
+    if (!isAvailable) {
+      throw new BadRequestException(
+        "Barber is not available at the scheduled time"
+      );
+    }
+
+    // 4️⃣ Validate services
+    if (!services || services.length === 0) {
+      throw new BadRequestException("At least one service is required");
+    }
+
+    const totalAmount = services.reduce(
+      (sum, service) => sum + service.price,
+      0
+    );
+
+    if (totalAmount <= 0) {
+      throw new BadRequestException("Invalid service pricing");
+    }
+
+    const commissionRate = barber.commissionRate ?? 0;
+    const commission = totalAmount * commissionRate;
+    const payoutAmount = totalAmount - commission;
+
+    // 5️⃣ Create booking
+    const booking = await this.bookingModel.create({
+      customerId,
+      barberId,
+      services,
+      scheduledAt: scheduledDate,
+      type,
+      location: location
+        ? {
+            type: "Point",
+            coordinates: [location.longitude, location.latitude],
+            address: location.address,
+            city: location.city,
+            postalCode: location.postalCode,
+            country: location.country,
+          }
+        : undefined,
+      specialRequests,
+      customerNotes,
+      promoCodeId,
+      payment: {
+        status: "pending",
+        amount: totalAmount,
+        currency: "USD",
+        commission,
+        payoutAmount,
+      },
+      source: "mobile_app",
+    });
+
+    // 🔔 Side effects (async, non-blocking)
+    this.sendBookingNotifications(booking).catch(console.error);
+
+    return this.mapToResponseDto(booking);
+  } catch (error) {
+    console.error("Booking creation failed:", error);
+
+    if (
+      error instanceof BadRequestException ||
+      error instanceof NotFoundException
+    ) {
+      throw error;
+    }
+
+    throw new InternalServerErrorException(
+      "Unable to create booking at this time"
+    );
   }
+}
+
 
   async updateBooking(
     bookingId: string,
