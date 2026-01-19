@@ -31,3 +31,13 @@ export const USER_PROFILE_UPDATED_SUCCESSFULLY = 'Profile updated successfully.'
 export function getUserNotFoundMessage(email: string): string {
   return `${NO_USER_FOUND}: ${email}`;
 }
+
+
+export const NotFound = (text:string) => {
+  return `${text} not found`;
+}
+
+
+export const InvalidId = (text:string) => {
+   return `Invalid ${text} id`;
+}

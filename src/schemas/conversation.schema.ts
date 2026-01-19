@@ -9,18 +9,21 @@ export enum ConversationType {
   GENERAL = 'general',
 }
 
+
 @Schema({ timestamps: true })
 export class Conversation {
+  // CUSTOMER → USER
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   customerId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  // BARBER → BARBER (NOT USER)
+  @Prop({ type: Types.ObjectId, ref: 'Barber', required: true, index: true })
   barberId: Types.ObjectId;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(ConversationType), 
-    default: ConversationType.BOOKING 
+  @Prop({
+    type: String,
+    enum: Object.values(ConversationType),
+    default: ConversationType.BOOKING,
   })
   type: ConversationType;
 
@@ -39,7 +42,6 @@ export class Conversation {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   lastMessageBy?: Types.ObjectId;
 
-  // Read status for each participant
   @Prop({
     type: {
       customer: {
@@ -64,7 +66,6 @@ export class Conversation {
     };
   };
 
-  // Conversation metadata
   @Prop()
   title?: string;
 
@@ -83,16 +84,16 @@ export class Conversation {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   archivedBy?: Types.ObjectId;
 
-  // Support conversation specific
   @Prop()
-  priority?: string; // 'low', 'medium', 'high', 'urgent'
+  priority?: string;
 
   @Prop()
-  status?: string; // 'open', 'pending', 'resolved', 'closed'
+  status?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
-  assignedTo?: Types.ObjectId; // Support agent
+  assignedTo?: Types.ObjectId;
 }
+
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 

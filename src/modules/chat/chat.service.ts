@@ -13,6 +13,7 @@ import { Model, Types } from "mongoose";
 import {
   Conversation,
   ConversationDocument,
+  ConversationType,
 } from "../../schemas/conversation.schema";
 import {
   ChatMessage,
@@ -32,46 +33,80 @@ export class ChatService {
     private conversationModel: Model<ConversationDocument>,
     @InjectModel(ChatMessage.name)
     private chatMessageModel: Model<ChatMessageDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
   async createConversation(
     customerId: string,
     barberId: string,
-    bookingId?: string
+    bookingId?: string,
   ): Promise<ConversationDocument> {
-    // Check if conversation already exists
-    let conversation = await this.conversationModel.findOne({
-      customerId,
-      barberId,
-      bookingId,
-    });
-
-    if (conversation) {
-      return conversation;
+    // 1. Validate ObjectId Format (Prevents BSON error crashes)
+    if (
+      !Types.ObjectId.isValid(customerId) ||
+      !Types.ObjectId.isValid(barberId)
+    ) {
+      throw new BadRequestException("Invalid Customer or Barber ID format");
     }
 
-    // Create new conversation
-    conversation = new this.conversationModel({
-      customerId,
-      barberId,
-      bookingId,
-      type: "booking",
-      isActive: true,
-      readStatus: {
-        customer: { unreadCount: 0 },
-        barber: { unreadCount: 0 },
-      },
-    });
+    if (bookingId && !Types.ObjectId.isValid(bookingId)) {
+      throw new BadRequestException("Invalid Booking ID format");
+    }
 
-    await conversation.save();
-    return conversation;
+    try {
+      const customerObjId = new Types.ObjectId(customerId);
+      const barberObjId = new Types.ObjectId(barberId);
+      const bookingObjId = bookingId
+        ? new Types.ObjectId(bookingId)
+        : undefined;
+
+      // 2. Check for existing conversation
+      // We use a lean query for performance since we only need to check existence
+      const existingConversation = await this.conversationModel
+        .findOne({
+          customerId: customerObjId,
+          barberId: barberObjId,
+          ...(bookingObjId && { bookingId: bookingObjId }),
+        })
+        .exec();
+
+      if (existingConversation) {
+        return existingConversation;
+      }
+
+      // 3. Create new conversation
+      const newConversation = new this.conversationModel({
+        customerId: customerObjId,
+        barberId: barberObjId,
+        bookingId: bookingObjId,
+        type: ConversationType.BOOKING,
+        isActive: true,
+        readStatus: {
+          customer: { unreadCount: 0, lastReadAt: new Date() },
+          barber: { unreadCount: 0, lastReadAt: new Date() },
+        },
+      });
+
+      return await newConversation.save();
+    } catch (error) {
+      // 4. Specific Error Handling
+      if (error.name === "ValidationError") {
+        throw new BadRequestException(`Validation Error: ${error.message}`);
+      }
+
+      // Log the error for the developer
+      console.error("Create Conversation Error:", error);
+
+      throw new InternalServerErrorException(
+        "An unexpected error occurred while creating the conversation",
+      );
+    }
   }
 
   async getConversations(
     userId: string,
     page: number = 1,
-    limit: number = 20
+    limit: number = 20,
   ): Promise<{
     conversations: ConversationDocument[];
     total: number;
@@ -81,20 +116,95 @@ export class ChatService {
   }> {
     const skip = (page - 1) * limit;
 
+    const userObjectId = new Types.ObjectId(userId);
+
     const [conversations, total] = await Promise.all([
-      this.conversationModel
-        .find({
-          $or: [{ customerId: userId }, { barberId: userId }],
-          isActive: true,
-        })
-        .populate("customerId", "name avatarUrl")
-        .populate("barberId", "name avatarUrl")
-        .sort({ lastMessageAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
+      this.conversationModel.aggregate([
+        // 1️⃣ Only active conversations
+        {
+          $match: {
+            isActive: true,
+            $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
+          },
+        },
+        // 2️⃣ Join BARBER → BARBERS
+        {
+          $lookup: {
+            from: "barbers",
+            localField: "barberId",
+            foreignField: "_id",
+            as: "barber",
+          },
+        },
+        { $unwind: "$barber" },
+
+        // 5️⃣ Join CUSTOMER → USERS
+        {
+          $lookup: {
+            from: "users",
+            localField: "customerId",
+            foreignField: "_id",
+            as: "customer",
+          },
+        },
+        { $unwind: "$customer" },
+
+        // 6️⃣ Join BARBER.userId → USERS
+        {
+          $lookup: {
+            from: "users",
+            localField: "barber.userId",
+            foreignField: "_id",
+            as: "barberUser",
+          },
+        },
+        {
+          $unwind: {
+            path: "$barberUser",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        // 4️⃣ Sort
+        {
+          $sort: { lastMessageAt: -1 },
+        },
+        { $skip: skip },
+        { $limit: limit },
+        // 6️⃣ PROJECT specific fields
+      {
+        $project: {
+          _id: 1,
+          type: 1,
+          bookingId: 1,
+          lastMessage: 1,
+          lastMessageAt: 1,
+          readStatus: 1,
+          // Project specific Customer fields
+          customer: {
+            _id: 1,
+            name: 1,
+            avatarUrl: 1,
+            phone: 1,
+          },
+          // Project specific Barber data
+          barber: {
+            _id: 1,
+            shopName: 1,
+            images: 1,
+            rating: 1,
+          },
+          // Project specific Barber User info (from the users collection)
+          barberUser: {
+            _id: 1,
+            name: 1,
+            avatarUrl: 1,
+          }
+        }
+      },
+      ]),
       this.conversationModel.countDocuments({
-        $or: [{ customerId: userId }, { barberId: userId }],
+        $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
         isActive: true,
       }),
     ]);
@@ -110,7 +220,7 @@ export class ChatService {
 
   async getConversationById(
     conversationId: string,
-    userId: string
+    userId: string,
   ): Promise<ConversationDocument> {
     const conversation = await this.conversationModel
       .findOne({
@@ -132,7 +242,7 @@ export class ChatService {
     conversationId: string,
     userId: string,
     page: number = 1,
-    limit: number = 50
+    limit: number = 50,
   ): Promise<{
     messages: ChatMessageDocument[];
     total: number;
@@ -152,14 +262,14 @@ export class ChatService {
 
       if (page < 1 || limit < 1) {
         throw new BadRequestException(
-          "Page and limit must be positive numbers"
+          "Page and limit must be positive numbers",
         );
       }
 
       // Verify user has access to conversation
       const hasAccess = await this.verifyConversationAccess(
         conversationId,
-        userId
+        userId,
       );
       if (!hasAccess) {
         throw new ForbiddenException("Access denied to conversation");
@@ -211,7 +321,7 @@ export class ChatService {
 
       // ✅ Wrap unknown errors in a generic InternalServerErrorException
       throw new InternalServerErrorException(
-        error.message || "An unexpected error occurred while fetching messages"
+        error.message || "An unexpected error occurred while fetching messages",
       );
     }
   }
@@ -284,8 +394,7 @@ export class ChatService {
     const session = await this.chatMessageModel.startSession();
     session.startTransaction();
 
-
-    console.log(1)
+    console.log(1);
 
     try {
       const {
@@ -303,20 +412,20 @@ export class ChatService {
       }
       if (!fromUserId) {
         throw new BadRequestException(
-          "Sender user ID (fromUserId) is required"
+          "Sender user ID (fromUserId) is required",
         );
       }
-      console.log(2)
+      console.log(2);
 
       // ✅ Verify user has access
       const hasAccess = await this.verifyConversationAccess(
         conversationId,
-        fromUserId
+        fromUserId,
       );
       if (!hasAccess) {
         throw new ForbiddenException("Access denied to conversation");
       }
-      console.log(3)
+      console.log(3);
 
       // ✅ Find the conversation
       const conversation = await this.conversationModel
@@ -325,19 +434,19 @@ export class ChatService {
       if (!conversation) {
         throw new NotFoundException("Conversation not found");
       }
-      console.log(4)
+      console.log(4);
 
       const toUserId =
         conversation.customerId.toString() === fromUserId
           ? conversation.barberId
           : conversation.customerId;
-      console.log(5)
+      console.log(5);
       // ✅ Normalize and validate attachments
       const normalizedAttachments =
         attachments?.map((att, index) => {
           if (!att.fileUrl && !att.url) {
             throw new BadRequestException(
-              `Attachment at index ${index} is missing a valid 'url' or 'fileUrl'`
+              `Attachment at index ${index} is missing a valid 'url' or 'fileUrl'`,
             );
           }
 
@@ -351,32 +460,29 @@ export class ChatService {
           };
         }) ?? [];
 
-        console.log(6)
+      console.log(6);
 
       // ✅ Create message document
-      const chatMessage = new this.chatMessageModel(
-        {
-          conversationId,
-          fromUserId,
-          toUserId,
-          type,
-          message,
-          attachments: normalizedAttachments,
-          status: MessageStatus.SENT,
-          sentAt: new Date(),
-          clientMessageId,
-        },
-       
-      );
-      console.log(7)
+      const chatMessage = new this.chatMessageModel({
+        conversationId,
+        fromUserId,
+        toUserId,
+        type,
+        message,
+        attachments: normalizedAttachments,
+        status: MessageStatus.SENT,
+        sentAt: new Date(),
+        clientMessageId,
+      });
+      console.log(7);
       await chatMessage.save({ session });
-console.log(71)
+      console.log(71);
       // Update conversation metadata
       const recipientField =
         conversation.customerId.toString() === fromUserId
           ? "barber"
           : "customer";
-console.log(8)
+      console.log(8);
       // ✅ Update conversation metadata safely
       await this.conversationModel.findByIdAndUpdate(
         conversationId,
@@ -388,9 +494,9 @@ console.log(8)
           lastMessageBy: fromUserId,
           $inc: { [`readStatus.${recipientField}.unreadCount`]: 1 },
         },
-        { session }
+        { session },
       );
-console.log(9)
+      console.log(9);
       // ✅ Commit the transaction
       await session.commitTransaction();
       session.endSession();
@@ -398,16 +504,16 @@ console.log(9)
       // ✅ Populate sender info
       const populatedMessage = await chatMessage.populate(
         "fromUserId",
-        "name avatarUrl"
+        "name avatarUrl",
       );
-console.log(10)
+      console.log(10);
       // ✅ Emit via WebSocket AFTER successful commit
       this.chatGateway.sendToConversation(
         conversationId,
         "new_message",
-        populatedMessage
+        populatedMessage,
       );
-      console.log(11)
+      console.log(11);
       this.chatGateway.sendToConversation(
         conversationId,
         "conversation_updated",
@@ -415,9 +521,9 @@ console.log(10)
           conversationId,
           lastMessage: message,
           lastMessageAt: chatMessage.sentAt,
-        }
+        },
       );
-      console.log(12)
+      console.log(12);
 
       return populatedMessage;
     } catch (error) {
@@ -436,7 +542,7 @@ console.log(10)
       }
 
       throw new InternalServerErrorException(
-        error.message || "An unexpected error occurred while creating message"
+        error.message || "An unexpected error occurred while creating message",
       );
     }
   }
@@ -444,7 +550,7 @@ console.log(10)
   async markMessageAsRead(
     conversationId: string,
     messageId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     const message = await this.chatMessageModel.findOne({
       _id: messageId,
@@ -467,7 +573,7 @@ console.log(10)
 
   async markMessagesAsRead(
     conversationId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Mark all unread messages as read
     await this.chatMessageModel.updateMany(
@@ -481,7 +587,7 @@ console.log(10)
           readAt: new Date(),
           status: MessageStatus.READ,
         },
-      }
+      },
     );
 
     // Reset unread count
@@ -500,7 +606,7 @@ console.log(10)
 
   async verifyConversationAccess(
     conversationId: string,
-    userId: string
+    userId: string,
   ): Promise<boolean> {
     const conversation = await this.conversationModel.findOne({
       _id: conversationId,
@@ -512,7 +618,7 @@ console.log(10)
 
   async archiveConversation(
     conversationId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     const conversation = await this.conversationModel.findOne({
       _id: conversationId,
@@ -531,7 +637,7 @@ console.log(10)
 
   async unarchiveConversation(
     conversationId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     const conversation = await this.conversationModel.findOne({
       _id: conversationId,
@@ -569,7 +675,7 @@ console.log(10)
     query: string,
     conversationId?: string,
     page: number = 1,
-    limit: number = 20
+    limit: number = 20,
   ): Promise<{
     messages: ChatMessageDocument[];
     total: number;

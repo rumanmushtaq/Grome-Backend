@@ -354,3 +354,73 @@ export class BarberResponseDto {
   @ApiPropertyOptional({ description: 'Distance from search location in kilometers' })
   distance?: number;
 }
+
+
+export class BarberWithUserDetailResponseDto {
+  @ApiProperty({ description: 'Barber ID' })
+  id: string;
+
+  @ApiProperty({ description: 'User ID' })
+  user: any;
+
+  @ApiProperty({ description: 'Barber location' })
+  location: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+
+  @ApiProperty({ description: 'Barber services' })
+  services: Array<{
+    serviceId: string;
+    price: number;
+  }>;
+
+  @ApiProperty({ description: 'Average rating' })
+  rating: number;
+
+  @ApiProperty({ description: 'Number of reviews' })
+  reviewsCount: number;
+
+  @ApiProperty({ description: 'Availability schedule' })
+  availability: AvailabilityDto;
+
+  @ApiPropertyOptional({ description: 'Experience in years' })
+  experienceYears?: number;
+
+  @ApiPropertyOptional({ description: 'Profile images' })
+  images?: string[];
+
+  @ApiPropertyOptional({ description: 'Bio description' })
+  bio?: string;
+
+  @ApiPropertyOptional({ description: 'Bio description' })
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Specialties' })
+  specialties?: string[];
+
+  @ApiProperty({ description: 'Is barber active' })
+  isActive: boolean;
+
+  @ApiProperty({ description: 'Is barber online' })
+  isOnline: boolean;
+
+  @ApiPropertyOptional({ description: 'Last seen date' })
+  lastSeenAt?: Date;
+
+  @ApiProperty({ description: 'Commission rate' })
+  commissionRate: number;
+
+  @ApiProperty({ description: 'Service radius in kilometers' })
+  serviceRadius: number;
+
+  @ApiProperty({ description: 'Created date' })
+  createdAt: Date;
+
+  @ApiProperty({ description: 'Updated date' })
+  updatedAt: Date;
+
+  // Distance from search location (calculated)
+  @ApiPropertyOptional({ description: 'Distance from search location in kilometers' })
+  distance?: number;
+}
