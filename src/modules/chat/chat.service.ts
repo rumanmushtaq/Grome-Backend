@@ -40,67 +40,53 @@ export class ChatService {
     customerId: string,
     barberId: string,
     bookingId?: string,
-  ): Promise<ConversationDocument> {
-    // 1. Validate ObjectId Format (Prevents BSON error crashes)
-    if (
-      !Types.ObjectId.isValid(customerId) ||
-      !Types.ObjectId.isValid(barberId)
-    ) {
-      throw new BadRequestException("Invalid Customer or Barber ID format");
+  ) {
+    const customerObjId = new Types.ObjectId(customerId);
+    const barberObjId = new Types.ObjectId(barberId);
+    const bookingObjId = bookingId ? new Types.ObjectId(bookingId) : null;
+
+    const match: any = {
+      customerId: customerObjId,
+      barberId: barberObjId,
+      isActive: true,
+    };
+
+    if (bookingObjId) {
+      match.bookingId = bookingObjId;
     }
 
-    if (bookingId && !Types.ObjectId.isValid(bookingId)) {
-      throw new BadRequestException("Invalid Booking ID format");
+    // 1️⃣ Check existing
+    const existing = await this.conversationModel.aggregate(
+      this.buildConversationListPipeline(match, customerObjId),
+    );
+
+    if (existing.length > 0) {
+      return existing[0];
     }
 
-    try {
-      const customerObjId = new Types.ObjectId(customerId);
-      const barberObjId = new Types.ObjectId(barberId);
-      const bookingObjId = bookingId
-        ? new Types.ObjectId(bookingId)
-        : undefined;
+    // 2️⃣ Create
+    const conversation = await this.conversationModel.create({
+      customerId: customerObjId,
+      barberId: barberObjId,
+      bookingId: bookingObjId,
+      type: ConversationType.BOOKING,
+      isActive: true,
+      lastMessageAt: new Date(),
+      readStatus: {
+        customer: { unreadCount: 0, lastReadAt: new Date() },
+        barber: { unreadCount: 0, lastReadAt: new Date() },
+      },
+    });
 
-      // 2. Check for existing conversation
-      // We use a lean query for performance since we only need to check existence
-      const existingConversation = await this.conversationModel
-        .findOne({
-          customerId: customerObjId,
-          barberId: barberObjId,
-          ...(bookingObjId && { bookingId: bookingObjId }),
-        })
-        .exec();
+    // 3️⃣ Fetch created
+    const created = await this.conversationModel.aggregate(
+      this.buildConversationListPipeline(
+        { _id: conversation._id },
+        customerObjId,
+      ),
+    );
 
-      if (existingConversation) {
-        return existingConversation;
-      }
-
-      // 3. Create new conversation
-      const newConversation = new this.conversationModel({
-        customerId: customerObjId,
-        barberId: barberObjId,
-        bookingId: bookingObjId,
-        type: ConversationType.BOOKING,
-        isActive: true,
-        readStatus: {
-          customer: { unreadCount: 0, lastReadAt: new Date() },
-          barber: { unreadCount: 0, lastReadAt: new Date() },
-        },
-      });
-
-      return await newConversation.save();
-    } catch (error) {
-      // 4. Specific Error Handling
-      if (error.name === "ValidationError") {
-        throw new BadRequestException(`Validation Error: ${error.message}`);
-      }
-
-      // Log the error for the developer
-      console.error("Create Conversation Error:", error);
-
-      throw new InternalServerErrorException(
-        "An unexpected error occurred while creating the conversation",
-      );
-    }
+    return created[0];
   }
 
   async getConversations(
@@ -172,36 +158,36 @@ export class ChatService {
         { $skip: skip },
         { $limit: limit },
         // 6️⃣ PROJECT specific fields
-      {
-        $project: {
-          _id: 1,
-          type: 1,
-          bookingId: 1,
-          lastMessage: 1,
-          lastMessageAt: 1,
-          readStatus: 1,
-          // Project specific Customer fields
-          customer: {
+        {
+          $project: {
             _id: 1,
-            name: 1,
-            avatarUrl: 1,
-            phone: 1,
+            type: 1,
+            bookingId: 1,
+            lastMessage: 1,
+            lastMessageAt: 1,
+            readStatus: 1,
+            // Project specific Customer fields
+            customer: {
+              _id: 1,
+              name: 1,
+              avatarUrl: 1,
+              phone: 1,
+            },
+            // Project specific Barber data
+            barber: {
+              _id: 1,
+              shopName: 1,
+              images: 1,
+              rating: 1,
+            },
+            // Project specific Barber User info (from the users collection)
+            barberUser: {
+              _id: 1,
+              name: 1,
+              avatarUrl: 1,
+            },
           },
-          // Project specific Barber data
-          barber: {
-            _id: 1,
-            shopName: 1,
-            images: 1,
-            rating: 1,
-          },
-          // Project specific Barber User info (from the users collection)
-          barberUser: {
-            _id: 1,
-            name: 1,
-            avatarUrl: 1,
-          }
-        }
-      },
+        },
       ]),
       this.conversationModel.countDocuments({
         $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
@@ -725,5 +711,126 @@ export class ChatService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  private buildConversationListPipeline(
+    match: any,
+    userObjectId: Types.ObjectId,
+  ): any[] {
+    return [
+      { $match: match },
+
+      /* SORT (chat list order) */
+      { $sort: { lastMessageAt: -1 } },
+
+      /* BARBER */
+      {
+        $lookup: {
+          from: "barbers",
+          localField: "barberId",
+          foreignField: "_id",
+          as: "barber",
+        },
+      },
+      { $unwind: "$barber" },
+
+      /* CUSTOMER */
+      {
+        $lookup: {
+          from: "users",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      { $unwind: "$customer" },
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "bookingId",
+          foreignField: "_id",
+          as: "booking",
+        },
+      },
+      { $unwind: "$booking" },
+
+      /* BARBER USER */
+      {
+        $lookup: {
+          from: "users",
+          localField: "barber.userId",
+          foreignField: "_id",
+          as: "barberUser",
+        },
+      },
+      {
+        $unwind: {
+          path: "$barberUser",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      /* COMPUTED FIELDS */
+      {
+        $addFields: {
+          unreadCount: {
+            $cond: [
+              { $eq: ["$customerId", userObjectId] },
+              "$readStatus.customer.unreadCount",
+              "$readStatus.barber.unreadCount",
+            ],
+          },
+
+          otherUser: {
+            $cond: [
+              { $eq: ["$customerId", userObjectId] },
+              {
+                _id: "$barberUser._id",
+                name: "$barberUser.name",
+                avatarUrl: "$barberUser.avatarUrl",
+              },
+              {
+                _id: "$customer._id",
+                name: "$customer.name",
+                avatarUrl: "$customer.avatarUrl",
+              },
+            ],
+          },
+        },
+      },
+
+      /* FINAL SHAPE */
+      {
+  $project: {
+    _id: 1,
+    type: 1,
+    bookingId: 1,
+    lastMessageAt: 1,
+    unreadCount: 1,
+    otherUser: 1,
+
+    customer: {
+      _id: '$customer._id',
+      name: '$customer.name',
+      avatarUrl: '$customer.avatarUrl',
+    },
+    booking: 1,
+
+    barberUser: {
+      _id: '$barberUser._id',
+      name: '$barberUser.name',
+      avatarUrl: '$barberUser.avatarUrl',
+    },
+
+    barber: {
+      _id: 1,
+      shopName: 1,
+      images: 1,
+      rating: 1,
+    },
+  },
+}
+
+    ];
   }
 }
