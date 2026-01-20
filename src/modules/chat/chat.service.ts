@@ -61,6 +61,7 @@ export class ChatService {
     );
 
     if (existing.length > 0) {
+      console.log("existing", existing);
       return existing[0];
     }
 
@@ -85,6 +86,8 @@ export class ChatService {
         customerObjId,
       ),
     );
+
+    console.log("created", created);
 
     return created[0];
   }
@@ -801,36 +804,35 @@ export class ChatService {
 
       /* FINAL SHAPE */
       {
-  $project: {
-    _id: 1,
-    type: 1,
-    bookingId: 1,
-    lastMessageAt: 1,
-    unreadCount: 1,
-    otherUser: 1,
+        $project: {
+          _id: 1,
+          type: 1,
+          bookingId: 1,
+          lastMessageAt: 1,
+          unreadCount: 1,
+          otherUser: 1,
 
-    customer: {
-      _id: '$customer._id',
-      name: '$customer.name',
-      avatarUrl: '$customer.avatarUrl',
-    },
-    booking: 1,
+          customer: {
+            _id: "$customer._id",
+            name: "$customer.name",
+            avatarUrl: "$customer.avatarUrl",
+          },
+          booking: 1,
 
-    barberUser: {
-      _id: '$barberUser._id',
-      name: '$barberUser.name',
-      avatarUrl: '$barberUser.avatarUrl',
-    },
+          barberUser: {
+            _id: "$barberUser._id",
+            name: "$barberUser.name",
+            avatarUrl: "$barberUser.avatarUrl",
+          },
 
-    barber: {
-      _id: 1,
-      shopName: 1,
-      images: 1,
-      rating: 1,
-    },
-  },
-}
-
+          barber: {
+            _id: 1,
+            shopName: 1,
+            images: 1,
+            rating: 1,
+          },
+        },
+      },
     ];
   }
 }
