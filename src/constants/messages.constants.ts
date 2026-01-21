@@ -41,3 +41,12 @@ export const NotFound = (text:string) => {
 export const InvalidId = (text:string) => {
    return `Invalid ${text} id`;
 }
+
+export const IdRequired = (text:string) => {
+  return `${text} ID is required`
+}
+export const AccessDenied = (text:string) => {
+  return `Access denied to ${text}`
+}
+
+export const PAGELIMITPOSITIVE = "Page and limit must be positive numbers"

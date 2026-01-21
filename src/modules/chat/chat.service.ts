@@ -23,6 +23,12 @@ import {
 } from "../../schemas/chat-message.schema";
 import { User, UserDocument } from "../../schemas/user.schema";
 import { ChatGateway } from "./chat.gateway";
+import {
+  AccessDenied,
+  IdRequired,
+  NotFound,
+  PAGELIMITPOSITIVE,
+} from "@/constants/messages.constants";
 
 @Injectable()
 export class ChatService {
@@ -211,17 +217,92 @@ export class ChatService {
     conversationId: string,
     userId: string,
   ): Promise<ConversationDocument> {
-    const conversation = await this.conversationModel
-      .findOne({
-        _id: conversationId,
-        $or: [{ customerId: userId }, { barberId: userId }],
-      })
-      .populate("customerId", "name avatarUrl")
-      .populate("barberId", "name avatarUrl")
-      .exec();
+    const conversationObjectId = new Types.ObjectId(conversationId);
+    const userObjectId = new Types.ObjectId(userId);
+
+    const [conversation] = await this.conversationModel.aggregate([
+      // 1️⃣ Match by conversation ID + active + user access
+      {
+        $match: {
+          _id: conversationObjectId,
+          isActive: true,
+          $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
+        },
+      },
+
+      // 2️⃣ Join BARBER → BARBERS
+      {
+        $lookup: {
+          from: "barbers",
+          localField: "barberId",
+          foreignField: "_id",
+          as: "barber",
+        },
+      },
+      { $unwind: "$barber" },
+
+      // 3️⃣ Join CUSTOMER → USERS
+      {
+        $lookup: {
+          from: "users",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      { $unwind: "$customer" },
+
+      // 4️⃣ Join BARBER.userId → USERS
+      {
+        $lookup: {
+          from: "users",
+          localField: "barber.userId",
+          foreignField: "_id",
+          as: "barberUser",
+        },
+      },
+      {
+        $unwind: {
+          path: "$barberUser",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 5️⃣ Project consistent response
+      {
+        $project: {
+          _id: 1,
+          type: 1,
+          bookingId: 1,
+          lastMessage: 1,
+          lastMessageAt: 1,
+          readStatus: 1,
+
+          customer: {
+            _id: "$customer._id",
+            name: "$customer.name",
+            avatarUrl: "$customer.avatarUrl",
+            phone: "$customer.phone",
+          },
+
+          barber: {
+            _id: "$barber._id",
+            shopName: "$barber.shopName",
+            images: "$barber.images",
+            rating: "$barber.rating",
+          },
+
+          barberUser: {
+            _id: "$barberUser._id",
+            name: "$barberUser.name",
+            avatarUrl: "$barberUser.avatarUrl",
+          },
+        },
+      },
+    ]);
 
     if (!conversation) {
-      throw new NotFoundException("Conversation not found");
+      throw new NotFoundException(NotFound("Conversation"));
     }
 
     return conversation;
@@ -239,80 +320,105 @@ export class ChatService {
     limit: number;
     totalPages: number;
   }> {
-    try {
-      // ✅ Validate inputs
-      if (!conversationId) {
-        throw new BadRequestException("Conversation ID is required");
-      }
+    // ✅ Validate inputs
+    if (!conversationId) {
+      throw new BadRequestException(IdRequired("Conversation"));
+    }
 
-      if (!userId) {
-        throw new BadRequestException("User ID is required");
-      }
+    if (!userId) {
+      throw new BadRequestException(IdRequired("User"));
+    }
 
-      if (page < 1 || limit < 1) {
-        throw new BadRequestException(
-          "Page and limit must be positive numbers",
-        );
-      }
+    if (page < 1 || limit < 1) {
+      throw new BadRequestException(PAGELIMITPOSITIVE);
+    }
 
-      // Verify user has access to conversation
-      const hasAccess = await this.verifyConversationAccess(
-        conversationId,
-        userId,
-      );
-      if (!hasAccess) {
-        throw new ForbiddenException("Access denied to conversation");
-      }
+    // ✅ Verify user has access to conversation
+    const hasAccess = await this.verifyConversationAccess(
+      conversationId,
+      userId,
+    );
 
-      const skip = (page - 1) * limit;
+    if (!hasAccess) {
+      throw new ForbiddenException(AccessDenied("conversation"));
+    }
 
-      const [messages, total] = await Promise.all([
-        this.chatMessageModel
-          .find({ conversationId })
-          .populate("fromUserId", "name avatarUrl")
-          .sort({ sentAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .exec(),
-        this.chatMessageModel.countDocuments({ conversationId }),
-      ]);
+    const skip = (page - 1) * limit;
 
-      // ✅ Handle case: no messages found
-      if (!messages || messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          limit,
-          totalPages: 0,
-        };
-      }
+    const conversationObjectId = new Types.ObjectId(conversationId);
 
-      // ✅ Return paginated messages in chronological order
+    const [messages, total] = await Promise.all([
+      this.chatMessageModel.aggregate([
+        // 1️⃣ Match messages by conversation
+        {
+          $match: {
+            conversationId: conversationObjectId,
+          },
+        },
+
+        // 2️⃣ Sort latest first (for pagination)
+        {
+          $sort: { sentAt: -1 },
+        },
+
+        // 3️⃣ Pagination
+        { $skip: skip },
+        { $limit: limit },
+
+        // 4️⃣ Join sender user
+        {
+          $lookup: {
+            from: "users",
+            localField: "fromUserId",
+            foreignField: "_id",
+            as: "fromUser",
+          },
+        },
+        { $unwind: "$fromUser" },
+
+        // 5️⃣ Project clean message shape
+        {
+          $project: {
+            _id: 1,
+            conversationId: 1,
+            message: 1,
+            messageType: 1,
+            sentAt: 1,
+            isRead: 1,
+
+            fromUser: {
+              _id: "$fromUser._id",
+              name: "$fromUser.name",
+              avatarUrl: "$fromUser.avatarUrl",
+            },
+          },
+        },
+      ]),
+
+      this.chatMessageModel.countDocuments({
+        conversationId: conversationObjectId,
+      }),
+    ]);
+
+    // ✅ No messages case
+    if (!messages.length) {
       return {
-        messages: messages.reverse(),
-        total,
+        messages: [],
+        total: 0,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: 0,
       };
-    } catch (error) {
-      // ✅ Log the error (use a logger if available)
-      console.error("❌ Error fetching messages:", error);
-
-      // ✅ Re-throw known NestJS exceptions directly
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-
-      // ✅ Wrap unknown errors in a generic InternalServerErrorException
-      throw new InternalServerErrorException(
-        error.message || "An unexpected error occurred while fetching messages",
-      );
     }
+
+    // ✅ Return in chronological order (old → new)
+    return {
+      messages: messages.reverse(),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // async createMessage(data: {
@@ -379,148 +485,171 @@ export class ChatService {
     type?: MessageType;
     attachments?: any[];
     clientMessageId?: string;
-  }): Promise<ChatMessageDocument> {
+  }): Promise<any> {
     const session = await this.chatMessageModel.startSession();
-    session.startTransaction();
-
-    console.log(1);
 
     try {
+      session.startTransaction();
+
       const {
         conversationId,
         fromUserId,
         message,
         type = MessageType.TEXT,
-        attachments,
+        attachments = [],
         clientMessageId,
       } = data;
 
-      // ✅ Validate required fields
-      if (!conversationId) {
-        throw new BadRequestException("Conversation ID is required");
+      // ✅ Validate ObjectIds
+      if (!Types.ObjectId.isValid(conversationId)) {
+        throw new BadRequestException("Invalid Conversation ID");
       }
-      if (!fromUserId) {
-        throw new BadRequestException(
-          "Sender user ID (fromUserId) is required",
-        );
-      }
-      console.log(2);
 
-      // ✅ Verify user has access
+      if (!Types.ObjectId.isValid(fromUserId)) {
+        throw new BadRequestException("Invalid Sender User ID");
+      }
+
+      const conversationObjectId = new Types.ObjectId(conversationId);
+      const fromUserObjectId = new Types.ObjectId(fromUserId);
+
+      // ✅ Verify access
       const hasAccess = await this.verifyConversationAccess(
         conversationId,
         fromUserId,
       );
+
       if (!hasAccess) {
         throw new ForbiddenException("Access denied to conversation");
       }
-      console.log(3);
 
-      // ✅ Find the conversation
+      // ✅ Fetch conversation inside transaction
       const conversation = await this.conversationModel
-        .findById(conversationId)
+        .findOne(
+          { _id: conversationObjectId, isActive: true },
+          { customerId: 1, barberId: 1 },
+        )
         .session(session);
+
       if (!conversation) {
         throw new NotFoundException("Conversation not found");
       }
-      console.log(4);
 
-      const toUserId =
-        conversation.customerId.toString() === fromUserId
-          ? conversation.barberId
-          : conversation.customerId;
-      console.log(5);
-      // ✅ Normalize and validate attachments
-      const normalizedAttachments =
-        attachments?.map((att, index) => {
-          if (!att.fileUrl && !att.url) {
-            throw new BadRequestException(
-              `Attachment at index ${index} is missing a valid 'url' or 'fileUrl'`,
-            );
-          }
+      // ✅ Resolve recipient
+      const isCustomer =
+        conversation.customerId.toString() === fromUserObjectId.toString();
 
-          return {
-            url: att.fileUrl || att.url,
-            filename: att.fileName || att.filename || "Unnamed File",
-            mimeType:
-              att.fileType || att.mimeType || "application/octet-stream",
-            size: att.size || 0,
-            thumbnailUrl: att.thumbnailUrl || null,
-          };
-        }) ?? [];
+      const toUserObjectId = isCustomer
+        ? conversation.barberId
+        : conversation.customerId;
 
-      console.log(6);
+      // ✅ Normalize attachments
+      const normalizedAttachments = attachments.map((att, index) => {
+        if (!att.url && !att.fileUrl) {
+          throw new BadRequestException(
+            `Attachment at index ${index} is missing a valid url`,
+          );
+        }
 
-      // ✅ Create message document
-      const chatMessage = new this.chatMessageModel({
-        conversationId,
-        fromUserId,
-        toUserId,
-        type,
-        message,
-        attachments: normalizedAttachments,
-        status: MessageStatus.SENT,
-        sentAt: new Date(),
-        clientMessageId,
+        return {
+          url: att.url || att.fileUrl,
+          filename: att.filename || att.fileName || "Unnamed file",
+          mimeType: att.mimeType || att.fileType || "application/octet-stream",
+          size: att.size || 0,
+          thumbnailUrl: att.thumbnailUrl || null,
+        };
       });
-      console.log(7);
-      await chatMessage.save({ session });
-      console.log(71);
-      // Update conversation metadata
-      const recipientField =
-        conversation.customerId.toString() === fromUserId
-          ? "barber"
-          : "customer";
-      console.log(8);
-      // ✅ Update conversation metadata safely
-      await this.conversationModel.findByIdAndUpdate(
-        conversationId,
+
+      // ✅ Create message
+      const chatMessage = await this.chatMessageModel.create(
+        [
+          {
+            conversationId: conversationObjectId,
+            fromUserId: fromUserObjectId,
+            toUserId: toUserObjectId,
+            type,
+            message,
+            attachments: normalizedAttachments,
+            status: MessageStatus.SENT,
+            sentAt: new Date(),
+            clientMessageId,
+          },
+        ],
+        { session },
+      );
+
+      // ✅ Update conversation metadata
+      const recipientField = isCustomer ? "barber" : "customer";
+
+      await this.conversationModel.updateOne(
+        { _id: conversationObjectId },
         {
           lastMessage:
-            message ||
-            (normalizedAttachments.length > 0 ? "📎 Attachment" : ""),
+            message || (normalizedAttachments.length ? "📎 Attachment" : ""),
           lastMessageAt: new Date(),
-          lastMessageBy: fromUserId,
-          $inc: { [`readStatus.${recipientField}.unreadCount`]: 1 },
+          lastMessageBy: fromUserObjectId,
+          $inc: {
+            [`readStatus.${recipientField}.unreadCount`]: 1,
+          },
         },
         { session },
       );
-      console.log(9);
-      // ✅ Commit the transaction
+
+      // ✅ Commit
       await session.commitTransaction();
       session.endSession();
 
-      // ✅ Populate sender info
-      const populatedMessage = await chatMessage.populate(
-        "fromUserId",
-        "name avatarUrl",
-      );
-      console.log(10);
-      // ✅ Emit via WebSocket AFTER successful commit
+      // ✅ Re-fetch populated message (SAFE)
+      const populatedMessage = await this.chatMessageModel.aggregate([
+        { $match: { _id: chatMessage[0]._id } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "fromUserId",
+            foreignField: "_id",
+            as: "fromUser",
+          },
+        },
+        { $unwind: "$fromUser" },
+        {
+          $project: {
+            _id: 1,
+            conversationId: 1,
+            message: 1,
+            type: 1,
+            attachments: 1,
+            sentAt: 1,
+            status: 1,
+            fromUser: {
+              _id: "$fromUser._id",
+              name: "$fromUser.name",
+              avatarUrl: "$fromUser.avatarUrl",
+            },
+          },
+        },
+      ]);
+
+      // ✅ Emit socket events AFTER commit
       this.chatGateway.sendToConversation(
         conversationId,
         "new_message",
-        populatedMessage,
+        populatedMessage[0],
       );
-      console.log(11);
+
       this.chatGateway.sendToConversation(
         conversationId,
         "conversation_updated",
         {
           conversationId,
-          lastMessage: message,
-          lastMessageAt: chatMessage.sentAt,
+          lastMessage:
+            message || (normalizedAttachments.length ? "📎 Attachment" : ""),
+          lastMessageAt: populatedMessage[0].sentAt,
         },
       );
-      console.log(12);
 
-      return populatedMessage;
+      return populatedMessage[0];
     } catch (error) {
-      // ✅ Abort the transaction if any error occurs
       await session.abortTransaction();
       session.endSession();
-
-      console.error("❌ Error creating message:", error);
 
       if (
         error instanceof BadRequestException ||
@@ -531,7 +660,7 @@ export class ChatService {
       }
 
       throw new InternalServerErrorException(
-        error.message || "An unexpected error occurred while creating message",
+        error.message || "Failed to create message",
       );
     }
   }
@@ -564,11 +693,46 @@ export class ChatService {
     conversationId: string,
     userId: string,
   ): Promise<void> {
-    // Mark all unread messages as read
+    // ✅ Validate ObjectIds
+    if (
+      !Types.ObjectId.isValid(conversationId) ||
+      !Types.ObjectId.isValid(userId)
+    ) {
+      return;
+    }
+
+    const conversationObjectId = new Types.ObjectId(conversationId);
+    const userObjectId = new Types.ObjectId(userId);
+
+    // ✅ Verify access
+    const hasAccess = await this.verifyConversationAccess(
+      conversationId,
+      userId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException(AccessDenied("conversation"));
+    }
+
+    // ✅ Fetch conversation (minimal fields)
+    const conversation = await this.conversationModel.findOne(
+      { _id: conversationObjectId, isActive: true },
+      { customerId: 1, barberId: 1 },
+    );
+
+    if (!conversation) return;
+
+    // ✅ Determine user role
+    const isCustomer =
+      conversation.customerId.toString() === userObjectId.toString();
+
+    const userField = isCustomer ? "customer" : "barber";
+
+    // ✅ Mark messages as read (idempotent)
     await this.chatMessageModel.updateMany(
       {
-        conversationId,
-        toUserId: userId,
+        conversationId: conversationObjectId,
+        toUserId: userObjectId,
         readAt: { $exists: false },
       },
       {
@@ -579,84 +743,155 @@ export class ChatService {
       },
     );
 
-    // Reset unread count
-    const conversation = await this.conversationModel.findById(conversationId);
-    if (!conversation) return;
-
-    const userField =
-      conversation.customerId.toString() === userId ? "customer" : "barber";
-    await this.conversationModel.findByIdAndUpdate(conversationId, {
-      $set: {
-        [`readStatus.${userField}.unreadCount`]: 0,
-        [`readStatus.${userField}.lastReadAt`]: new Date(),
+    // ✅ Reset unread count
+    await this.conversationModel.updateOne(
+      { _id: conversationObjectId },
+      {
+        $set: {
+          [`readStatus.${userField}.unreadCount`]: 0,
+          [`readStatus.${userField}.lastReadAt`]: new Date(),
+        },
       },
-    });
+    );
   }
 
   async verifyConversationAccess(
     conversationId: string,
     userId: string,
   ): Promise<boolean> {
-    const conversation = await this.conversationModel.findOne({
-      _id: conversationId,
-      $or: [{ customerId: userId }, { barberId: userId }],
+    if (
+      !Types.ObjectId.isValid(conversationId) ||
+      !Types.ObjectId.isValid(userId)
+    ) {
+      return false;
+    }
+
+    const conversationObjectId = new Types.ObjectId(conversationId);
+    const userObjectId = new Types.ObjectId(userId);
+
+    const exists = await this.conversationModel.exists({
+      _id: conversationObjectId,
+      isActive: true,
+      $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
     });
 
-    return !!conversation;
+    return !!exists;
   }
 
   async archiveConversation(
     conversationId: string,
     userId: string,
   ): Promise<void> {
-    const conversation = await this.conversationModel.findOne({
-      _id: conversationId,
-      $or: [{ customerId: userId }, { barberId: userId }],
-    });
-
-    if (!conversation) {
-      throw new NotFoundException("Conversation not found");
+    if (
+      !Types.ObjectId.isValid(conversationId) ||
+      !Types.ObjectId.isValid(userId)
+    ) {
+      throw new BadRequestException("Invalid IDs");
     }
 
-    conversation.isArchived = true;
-    conversation.archivedAt = new Date();
-    conversation.archivedBy = new Types.ObjectId(userId);
-    await conversation.save();
+    const conversationObjectId = new Types.ObjectId(conversationId);
+    const userObjectId = new Types.ObjectId(userId);
+
+    const hasAccess = await this.verifyConversationAccess(
+      conversationId,
+      userId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException("Access denied to conversation");
+    }
+
+    const result = await this.conversationModel.updateOne(
+      { _id: conversationObjectId, isActive: true },
+      {
+        $set: {
+          isArchived: true,
+          archivedAt: new Date(),
+          archivedBy: userObjectId,
+        },
+      },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException("Conversation not found");
+    }
   }
 
   async unarchiveConversation(
     conversationId: string,
     userId: string,
   ): Promise<void> {
-    const conversation = await this.conversationModel.findOne({
-      _id: conversationId,
-      $or: [{ customerId: userId }, { barberId: userId }],
-    });
-
-    if (!conversation) {
-      throw new NotFoundException("Conversation not found");
+    if (
+      !Types.ObjectId.isValid(conversationId) ||
+      !Types.ObjectId.isValid(userId)
+    ) {
+      throw new BadRequestException("Invalid IDs");
     }
 
-    conversation.isArchived = false;
-    conversation.archivedAt = undefined;
-    conversation.archivedBy = undefined;
-    await conversation.save();
+    const conversationObjectId = new Types.ObjectId(conversationId);
+
+    const hasAccess = await this.verifyConversationAccess(
+      conversationId,
+      userId,
+    );
+
+    if (!hasAccess) {
+      throw new ForbiddenException("Access denied to conversation");
+    }
+
+    const result = await this.conversationModel.updateOne(
+      { _id: conversationObjectId, isActive: true },
+      {
+        $unset: {
+          archivedAt: 1,
+          archivedBy: 1,
+        },
+        $set: {
+          isArchived: false,
+        },
+      },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException("Conversation not found");
+    }
   }
 
   async getUnreadCount(userId: string): Promise<number> {
-    const conversations = await this.conversationModel.find({
-      $or: [{ customerId: userId }, { barberId: userId }],
-      isActive: true,
-    });
-
-    let totalUnread = 0;
-    for (const conversation of conversations) {
-      const userField =
-        conversation.customerId.toString() === userId ? "customer" : "barber";
-      totalUnread += conversation.readStatus[userField].unreadCount;
+    if (!Types.ObjectId.isValid(userId)) {
+      return 0;
     }
 
-    return totalUnread;
+    const userObjectId = new Types.ObjectId(userId);
+
+    const result = await this.conversationModel.aggregate([
+      {
+        $match: {
+          isActive: true,
+          isArchived: { $ne: true },
+          $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
+        },
+      },
+      {
+        $project: {
+          unreadCount: {
+            $cond: [
+              { $eq: ["$customerId", userObjectId] },
+              "$readStatus.customer.unreadCount",
+              "$readStatus.barber.unreadCount",
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalUnread: { $sum: "$unreadCount" },
+        },
+      },
+    ]);
+
+    return result.length ? result[0].totalUnread : 0;
   }
 
   async searchMessages(
@@ -672,40 +907,104 @@ export class ChatService {
     limit: number;
     totalPages: number;
   }> {
-    const skip = (page - 1) * limit;
-
-    // Build search filter
-    const searchFilter: any = {
-      $text: { $search: query },
-    };
-
-    if (conversationId) {
-      searchFilter.conversationId = conversationId;
-    } else {
-      // Get user's conversations
-      const userConversations = await this.conversationModel
-        .find({
-          $or: [{ customerId: userId }, { barberId: userId }],
-          isActive: true,
-        })
-        .select("_id");
-
-      searchFilter.conversationId = {
-        $in: userConversations.map((c) => c._id),
-      };
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException("Invalid User ID");
     }
 
-    const [messages, total] = await Promise.all([
-      this.chatMessageModel
-        .find(searchFilter)
-        .populate("fromUserId", "name avatarUrl")
-        .populate("conversationId")
-        .sort({ sentAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.chatMessageModel.countDocuments(searchFilter),
-    ]);
+    const userObjectId = new Types.ObjectId(userId);
+    const skip = (page - 1) * limit;
+
+    // ✅ Build aggregation pipeline
+    const pipeline: any[] = [];
+
+    // 1️⃣ Match conversations (by conversationId or all user conversations)
+    if (conversationId) {
+      if (!Types.ObjectId.isValid(conversationId)) {
+        throw new BadRequestException("Invalid Conversation ID");
+      }
+      const conversationObjectId = new Types.ObjectId(conversationId);
+
+      // Optional: verify user has access
+      const hasAccess = await this.verifyConversationAccess(
+        conversationId,
+        userId,
+      );
+      if (!hasAccess) {
+        throw new ForbiddenException("Access denied to conversation");
+      }
+
+      pipeline.push({
+        $match: {
+          conversationId: conversationObjectId,
+          $text: { $search: query },
+        },
+      });
+    } else {
+      // Match all active conversations of this user
+      pipeline.push({
+        $lookup: {
+          from: "conversations",
+          localField: "conversationId",
+          foreignField: "_id",
+          as: "conversation",
+        },
+      });
+      pipeline.push({ $unwind: "$conversation" });
+
+      pipeline.push({
+        $match: {
+          $or: [
+            { "conversation.customerId": userObjectId },
+            { "conversation.barberId": userObjectId },
+          ],
+          "conversation.isActive": true,
+          $text: { $search: query },
+        },
+      });
+    }
+
+    // 2️⃣ Sort by latest
+    pipeline.push({ $sort: { sentAt: -1 } });
+
+    // 3️⃣ Count total messages
+    const countPipeline = [...pipeline, { $count: "total" }];
+    const totalResult = await this.chatMessageModel.aggregate(countPipeline);
+    const total = totalResult.length ? totalResult[0].total : 0;
+
+    // 4️⃣ Pagination
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    // 5️⃣ Populate sender info
+    pipeline.push({
+      $lookup: {
+        from: "users",
+        localField: "fromUserId",
+        foreignField: "_id",
+        as: "fromUser",
+      },
+    });
+    pipeline.push({ $unwind: "$fromUser" });
+
+    // 6️⃣ Project clean fields
+    pipeline.push({
+      $project: {
+        _id: 1,
+        conversationId: 1,
+        message: 1,
+        messageType: 1,
+        attachments: 1,
+        sentAt: 1,
+        status: 1,
+        fromUser: {
+          _id: "$fromUser._id",
+          name: "$fromUser.name",
+          avatarUrl: "$fromUser.avatarUrl",
+        },
+      },
+    });
+
+    const messages = await this.chatMessageModel.aggregate(pipeline);
 
     return {
       messages,
