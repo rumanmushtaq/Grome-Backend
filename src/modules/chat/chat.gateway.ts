@@ -147,7 +147,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // ✅ Use transaction in createMessage
       const newMessage = await this.chatService.createMessage({
         conversationId,
-        fromUserId: client.user.userId,
+        user: client.user,
         message,
         type: type as MessageType,
         attachments,

@@ -25,6 +25,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { PaginationDto } from "../../dto/common/pagination.dto";
 import { MessageType } from "../../schemas/chat-message.schema";
 import { CreateConversationDto, CreateMessageDto } from "./dtos/chat.dto";
+import { userInfo } from "os";
 
 @ApiTags("chat")
 @Controller("chat")
@@ -108,12 +109,13 @@ export class ChatController {
     @CurrentUser() user: any,
     @Body() body: CreateMessageDto,
   ) {
+    console.log("user", user)
     return this.chatService.createMessage({
       conversationId: id,
-      fromUserId: user.userId,
       message: body.message,
       type: body.type as MessageType,
       attachments: body.attachments,
+      user : user
     });
   }
 
@@ -122,7 +124,7 @@ export class ChatController {
   @ApiParam({ name: "id", description: "Conversation ID" })
   @ApiResponse({ status: 200, description: "Messages marked as read" })
   async markAsRead(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.chatService.markMessagesAsRead(id, user.userId);
+    await this.chatService.markMessagesAsRead(id, user);
     return { message: "Messages marked as read" };
   }
 
@@ -131,7 +133,7 @@ export class ChatController {
   @ApiParam({ name: "id", description: "Conversation ID" })
   @ApiResponse({ status: 200, description: "Conversation archived" })
   async archiveConversation(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.chatService.archiveConversation(id, user.userId);
+    await this.chatService.archiveConversation(id, user);
     return { message: "Conversation archived" };
   }
 
@@ -143,7 +145,7 @@ export class ChatController {
     @Param("id") id: string,
     @CurrentUser() user: any,
   ) {
-    await this.chatService.unarchiveConversation(id, user.userId);
+    await this.chatService.unarchiveConversation(id, user);
     return { message: "Conversation unarchived" };
   }
 
@@ -171,7 +173,7 @@ export class ChatController {
     @Query("conversationId") conversationId?: string,
   ) {
     return this.chatService.searchMessages(
-      user.userId,
+      user,
       query,
       conversationId,
       paginationDto.page,

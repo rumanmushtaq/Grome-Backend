@@ -495,11 +495,12 @@ export class ChatService {
 
   async createMessage(data: {
     conversationId: string;
-    fromUserId: string;
+
     message?: string;
     type?: MessageType;
     attachments?: any[];
     clientMessageId?: string;
+    user: any;
   }): Promise<any> {
     const session = await this.chatMessageModel.startSession();
 
@@ -508,13 +509,14 @@ export class ChatService {
 
       const {
         conversationId,
-        fromUserId,
+
         message,
         type = MessageType.TEXT,
         attachments = [],
         clientMessageId,
+        user,
       } = data;
-
+      const fromUserId = user.userId;
       // ✅ Validate ObjectIds
       if (!Types.ObjectId.isValid(conversationId)) {
         throw new BadRequestException("Invalid Conversation ID");
@@ -530,7 +532,7 @@ export class ChatService {
       // ✅ Verify access
       const hasAccess = await this.verifyConversationAccess(
         conversationId,
-        fromUserId,
+        user,
       );
 
       if (!hasAccess) {
@@ -550,10 +552,9 @@ export class ChatService {
       }
 
       // ✅ Resolve recipient
-      const isCustomer =
-        conversation.customerId.toString() === fromUserObjectId.toString();
 
-      const toUserObjectId = isCustomer
+
+      const toUserObjectId = user.role === "customer"
         ? conversation.barberId
         : conversation.customerId;
 
@@ -593,7 +594,7 @@ export class ChatService {
       );
 
       // ✅ Update conversation metadata
-      const recipientField = isCustomer ? "barber" : "customer";
+      const recipientField = user.role;
 
       await this.conversationModel.updateOne(
         { _id: conversationObjectId },
@@ -706,23 +707,23 @@ export class ChatService {
 
   async markMessagesAsRead(
     conversationId: string,
-    userId: string,
+    user: any,
   ): Promise<void> {
     // ✅ Validate ObjectIds
     if (
       !Types.ObjectId.isValid(conversationId) ||
-      !Types.ObjectId.isValid(userId)
+      !Types.ObjectId.isValid(user.userId)
     ) {
       return;
     }
 
     const conversationObjectId = new Types.ObjectId(conversationId);
-    const userObjectId = new Types.ObjectId(userId);
+    const userObjectId = new Types.ObjectId(user.userId);
 
     // ✅ Verify access
     const hasAccess = await this.verifyConversationAccess(
       conversationId,
-      userId,
+      user,
     );
 
     if (!hasAccess) {
@@ -737,11 +738,7 @@ export class ChatService {
 
     if (!conversation) return;
 
-    // ✅ Determine user role
-    const isCustomer =
-      conversation.customerId.toString() === userObjectId.toString();
-
-    const userField = isCustomer ? "customer" : "barber";
+    const userField = user.role;
 
     // ✅ Mark messages as read (idempotent)
     await this.chatMessageModel.updateMany(
@@ -772,29 +769,28 @@ export class ChatService {
 
   async verifyConversationAccess(
     conversationId: string,
-    userId: string,
+    user: any,
   ): Promise<boolean> {
     if (
       !Types.ObjectId.isValid(conversationId) ||
-      !Types.ObjectId.isValid(userId)
+      !Types.ObjectId.isValid(user.userId)
     ) {
       return false;
     }
 
     const conversationObjectId = new Types.ObjectId(conversationId);
     // Get barber _id if userId belongs to barber
-    const barberId = await this.getBarberIdByUserId(userId);
+    const userStringId =
+      user.role === "customer"
+        ? user.userId
+        : await this.getBarberIdByUserId(user.userId);
 
-    const userObjectId = new Types.ObjectId(userId);
-    const barberObjectId = barberId ? new Types.ObjectId(barberId) : null;
+    const userObjectId = new Types.ObjectId(userStringId);
 
     const exists = await this.conversationModel.exists({
       _id: conversationObjectId,
       isActive: true,
-      $or: [
-        { customerId: userObjectId },
-        ...(barberObjectId ? [{ barberId: barberObjectId }] : []),
-      ],
+      $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
     });
 
     return !!exists;
@@ -802,21 +798,21 @@ export class ChatService {
 
   async archiveConversation(
     conversationId: string,
-    userId: string,
+    user: any,
   ): Promise<void> {
     if (
       !Types.ObjectId.isValid(conversationId) ||
-      !Types.ObjectId.isValid(userId)
+      !Types.ObjectId.isValid(user.userId)
     ) {
       throw new BadRequestException("Invalid IDs");
     }
 
     const conversationObjectId = new Types.ObjectId(conversationId);
-    const userObjectId = new Types.ObjectId(userId);
+    const userObjectId = new Types.ObjectId(user.userId);
 
     const hasAccess = await this.verifyConversationAccess(
       conversationId,
-      userId,
+      user,
     );
 
     if (!hasAccess) {
@@ -841,11 +837,11 @@ export class ChatService {
 
   async unarchiveConversation(
     conversationId: string,
-    userId: string,
+    user: any,
   ): Promise<void> {
     if (
       !Types.ObjectId.isValid(conversationId) ||
-      !Types.ObjectId.isValid(userId)
+      !Types.ObjectId.isValid(user.userId)
     ) {
       throw new BadRequestException("Invalid IDs");
     }
@@ -854,7 +850,7 @@ export class ChatService {
 
     const hasAccess = await this.verifyConversationAccess(
       conversationId,
-      userId,
+      user,
     );
 
     if (!hasAccess) {
@@ -917,7 +913,7 @@ export class ChatService {
   }
 
   async searchMessages(
-    userId: string,
+    user: any,
     query: string,
     conversationId?: string,
     page: number = 1,
@@ -929,12 +925,15 @@ export class ChatService {
     limit: number;
     totalPages: number;
   }> {
-    if (!Types.ObjectId.isValid(userId)) {
+    if (!Types.ObjectId.isValid(user.userId)) {
       throw new BadRequestException("Invalid User ID");
     }
 
-    const userObjectId = new Types.ObjectId(userId);
+    const userObjectId = new Types.ObjectId(user.userId);
     const skip = (page - 1) * limit;
+
+      // Escape regex to prevent injection
+  const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     // ✅ Build aggregation pipeline
     const pipeline: any[] = [];
@@ -949,7 +948,7 @@ export class ChatService {
       // Optional: verify user has access
       const hasAccess = await this.verifyConversationAccess(
         conversationId,
-        userId,
+        user,
       );
       if (!hasAccess) {
         throw new ForbiddenException("Access denied to conversation");
@@ -958,7 +957,7 @@ export class ChatService {
       pipeline.push({
         $match: {
           conversationId: conversationObjectId,
-          $text: { $search: query },
+          message: { $regex: safeQuery, $options: 'i' },
         },
       });
     } else {
@@ -980,7 +979,7 @@ export class ChatService {
             { "conversation.barberId": userObjectId },
           ],
           "conversation.isActive": true,
-          $text: { $search: query },
+          message: { $regex: safeQuery, $options: 'i' },
         },
       });
     }
@@ -1043,10 +1042,6 @@ export class ChatService {
       .findOne({ userId: userObjectId })
       .select("_id")
       .exec();
-
-    if (!barber) {
-      throw new NotFoundException("Barber not found");
-    }
 
     return barber._id.toString();
   }
