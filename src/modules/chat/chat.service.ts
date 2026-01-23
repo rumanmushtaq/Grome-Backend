@@ -29,6 +29,7 @@ import {
   NotFound,
   PAGELIMITPOSITIVE,
 } from "@/constants/messages.constants";
+import { Barber, BarberDocument } from "@/schemas/barber.schema";
 
 @Injectable()
 export class ChatService {
@@ -40,6 +41,7 @@ export class ChatService {
     @InjectModel(ChatMessage.name)
     private chatMessageModel: Model<ChatMessageDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
   ) {}
 
   async createConversation(
@@ -102,6 +104,7 @@ export class ChatService {
     userId: string,
     page: number = 1,
     limit: number = 20,
+    userRole : string
   ): Promise<{
     conversations: ConversationDocument[];
     total: number;
@@ -110,8 +113,10 @@ export class ChatService {
     totalPages: number;
   }> {
     const skip = (page - 1) * limit;
+    const userGetId =
+      userRole === "customer" ? userId : await this.getBarberIdByUserId(userId);
 
-    const userObjectId = new Types.ObjectId(userId);
+    const userObjectId = new Types.ObjectId(userGetId);
 
     const [conversations, total] = await Promise.all([
       this.conversationModel.aggregate([
@@ -216,9 +221,12 @@ export class ChatService {
   async getConversationById(
     conversationId: string,
     userId: string,
+    userRole: string,
   ): Promise<ConversationDocument> {
     const conversationObjectId = new Types.ObjectId(conversationId);
-    const userObjectId = new Types.ObjectId(userId);
+    const userGetId =
+      userRole === "customer" ? userId : await this.getBarberIdByUserId(userId);
+    const userObjectId = new Types.ObjectId(userGetId);
 
     const [conversation] = await this.conversationModel.aggregate([
       // 1️⃣ Match by conversation ID + active + user access
@@ -1013,6 +1021,20 @@ export class ChatService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  private async getBarberIdByUserId(userId: string): Promise<string> {
+    const userObjectId = new Types.ObjectId(userId)
+    const barber = await this.barberModel
+      .findOne({ userId : userObjectId })
+      .select("_id")
+      .exec();
+
+    if (!barber) {
+      throw new NotFoundException("Barber not found");
+    }
+
+    return barber._id.toString();
   }
 
   private buildConversationListPipeline(

@@ -33,7 +33,7 @@ async createConversation(
     @CurrentUser() user: any,
     @Query() paginationDto: PaginationDto,
   ) {
-    return this.chatService.getConversations(user.userId, paginationDto.page, paginationDto.limit);
+    return this.chatService.getConversations(user.userId, paginationDto.page, paginationDto.limit, user.role);
   }
 
   @Get('conversations/:id')
@@ -44,7 +44,9 @@ async createConversation(
     @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
-    return this.chatService.getConversationById(id, user.userId);
+
+    console.log("user", user);
+    return this.chatService.getConversationById(id, user.userId, user.role);
   }
 
   @Get('conversations/:id/messages')
