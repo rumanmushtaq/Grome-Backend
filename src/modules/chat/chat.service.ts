@@ -100,88 +100,206 @@ export class ChatService {
     return created[0];
   }
 
-async getConversations(
-  userId: string,
-  page = 1,
-  limit = 20,
-  userRole: 'customer' | 'barber',
-): Promise<{
-  conversations: ConversationDocument[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}> {
-  const skip = (page - 1) * limit;
+  async getConversations(
+    userId: string,
+    page = 1,
+    limit = 20,
+    userRole: "customer" | "barber",
+  ): Promise<{
+    conversations: ConversationDocument[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const skip = (page - 1) * limit;
 
-  // 1️⃣ Normalize identity (CRITICAL STEP)
-  const resolvedId =
-    userRole === 'customer'
-      ? userId
-      : await this.getBarberIdByUserId(userId);
+    // 1️⃣ Normalize identity (CRITICAL STEP)
+    const resolvedId =
+      userRole === "customer" ? userId : await this.getBarberIdByUserId(userId);
 
-  const resolvedObjectId = new Types.ObjectId(resolvedId);
+    const resolvedObjectId = new Types.ObjectId(resolvedId);
 
-  // 2️⃣ Build role-based match (NO $or)
-  const matchCondition =
-    userRole === 'customer'
-      ? { customerId: resolvedObjectId }
-      : { barberId: resolvedObjectId };
+    // 2️⃣ Build role-based match (NO $or)
+    const matchCondition =
+      userRole === "customer"
+        ? { customerId: resolvedObjectId }
+        : { barberId: resolvedObjectId };
 
-  // 3️⃣ Run aggregation + count in parallel
-  const [conversations, total] = await Promise.all([
-    this.conversationModel.aggregate([
+    // 3️⃣ Run aggregation + count in parallel
+    const [conversations, total] = await Promise.all([
+      this.conversationModel.aggregate([
+        {
+          $match: {
+            isActive: true,
+            ...matchCondition,
+          },
+        },
+
+        // BARBER
+        {
+          $lookup: {
+            from: "barbers",
+            localField: "barberId",
+            foreignField: "_id",
+            as: "barber",
+          },
+        },
+        { $unwind: "$barber" },
+
+        // CUSTOMER
+        {
+          $lookup: {
+            from: "users",
+            localField: "customerId",
+            foreignField: "_id",
+            as: "customer",
+          },
+        },
+        { $unwind: "$customer" },
+
+        // BARBER USER
+        {
+          $lookup: {
+            from: "users",
+            localField: "barber.userId",
+            foreignField: "_id",
+            as: "barberUser",
+          },
+        },
+        {
+          $unwind: {
+            path: "$barberUser",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        // SORT + PAGINATION
+        { $sort: { lastMessageAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+
+        // FINAL SHAPE
+        {
+          $project: {
+            _id: 1,
+            type: 1,
+            bookingId: 1,
+            lastMessage: 1,
+            lastMessageAt: 1,
+            readStatus: 1,
+
+            customer: {
+              _id: "$customer._id",
+              name: "$customer.name",
+              avatarUrl: "$customer.avatarUrl",
+              phone: "$customer.phone",
+            },
+
+            barber: {
+              _id: "$barber._id",
+              shopName: "$barber.shopName",
+              images: "$barber.images",
+              rating: "$barber.rating",
+            },
+
+            barberUser: {
+              _id: "$barberUser._id",
+              name: "$barberUser.name",
+              avatarUrl: "$barberUser.avatarUrl",
+            },
+          },
+        },
+      ]),
+
+      // 4️⃣ Accurate count (same match condition)
+      this.conversationModel.countDocuments({
+        isActive: true,
+        ...matchCondition,
+      }),
+    ]);
+
+    return {
+      conversations,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getConversationById(
+    conversationId: string,
+    userId: string,
+    userRole: "customer" | "barber",
+  ): Promise<ConversationDocument> {
+    // 1️⃣ Validate conversationId
+    if (!Types.ObjectId.isValid(conversationId)) {
+      throw new BadRequestException("Invalid Conversation ID");
+    }
+
+    const conversationObjectId = new Types.ObjectId(conversationId);
+
+    // 2️⃣ Resolve barberId if needed
+    const resolvedUserId =
+      userRole === "customer" ? userId : await this.getBarberIdByUserId(userId);
+    const resolvedObjectId = new Types.ObjectId(resolvedUserId);
+
+    // 3️⃣ Role-based match condition
+    const matchCondition =
+      userRole === "customer"
+        ? { customerId: resolvedObjectId }
+        : { barberId: resolvedObjectId };
+
+    // 4️⃣ Aggregate pipeline
+    const [conversation] = await this.conversationModel.aggregate([
       {
         $match: {
+          _id: conversationObjectId,
           isActive: true,
           ...matchCondition,
         },
       },
 
-      // BARBER
+      // Join BARBER → BARBERS
       {
         $lookup: {
-          from: 'barbers',
-          localField: 'barberId',
-          foreignField: '_id',
-          as: 'barber',
+          from: "barbers",
+          localField: "barberId",
+          foreignField: "_id",
+          as: "barber",
         },
       },
-      { $unwind: '$barber' },
+      { $unwind: "$barber" },
 
-      // CUSTOMER
+      // Join CUSTOMER → USERS
       {
         $lookup: {
-          from: 'users',
-          localField: 'customerId',
-          foreignField: '_id',
-          as: 'customer',
+          from: "users",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customer",
         },
       },
-      { $unwind: '$customer' },
+      { $unwind: "$customer" },
 
-      // BARBER USER
+      // Join BARBER.userId → USERS
       {
         $lookup: {
-          from: 'users',
-          localField: 'barber.userId',
-          foreignField: '_id',
-          as: 'barberUser',
+          from: "users",
+          localField: "barber.userId",
+          foreignField: "_id",
+          as: "barberUser",
         },
       },
       {
         $unwind: {
-          path: '$barberUser',
+          path: "$barberUser",
           preserveNullAndEmptyArrays: true,
         },
       },
 
-      // SORT + PAGINATION
-      { $sort: { lastMessageAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-
-      // FINAL SHAPE
+      // Project clean response
       {
         $project: {
           _id: 1,
@@ -192,246 +310,131 @@ async getConversations(
           readStatus: 1,
 
           customer: {
-            _id: '$customer._id',
-            name: '$customer.name',
-            avatarUrl: '$customer.avatarUrl',
-            phone: '$customer.phone',
+            _id: "$customer._id",
+            name: "$customer.name",
+            avatarUrl: "$customer.avatarUrl",
+            phone: "$customer.phone",
           },
 
           barber: {
-            _id: '$barber._id',
-            shopName: '$barber.shopName',
-            images: '$barber.images',
-            rating: '$barber.rating',
+            _id: "$barber._id",
+            shopName: "$barber.shopName",
+            images: "$barber.images",
+            rating: "$barber.rating",
           },
 
           barberUser: {
-            _id: '$barberUser._id',
-            name: '$barberUser.name',
-            avatarUrl: '$barberUser.avatarUrl',
+            _id: "$barberUser._id",
+            name: "$barberUser.name",
+            avatarUrl: "$barberUser.avatarUrl",
           },
         },
       },
-    ]),
+    ]);
 
-    // 4️⃣ Accurate count (same match condition)
-    this.conversationModel.countDocuments({
+    if (!conversation) {
+      throw new NotFoundException("Conversation not found");
+    }
+
+    return conversation;
+  }
+
+  async getMessages(
+    conversationId: string,
+    userId: string,
+    userRole: "customer" | "barber",
+    page: number = 1,
+    limit: number = 50,
+  ): Promise<{
+    messages: ChatMessageDocument[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    // 1️⃣ Validate inputs
+    if (!conversationId || !Types.ObjectId.isValid(conversationId)) {
+      throw new BadRequestException(IdRequired("Conversation"));
+    }
+
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException(IdRequired("User"));
+    }
+
+    if (page < 1 || limit < 1) {
+      throw new BadRequestException(PAGELIMITPOSITIVE);
+    }
+
+    const conversationObjectId = new Types.ObjectId(conversationId);
+
+    // 2️⃣ Resolve barberId if needed
+    let resolvedUserId = userId;
+    if (userRole === "barber") {
+      resolvedUserId = await this.getBarberIdByUserId(userId);
+    }
+    const resolvedObjectId = new Types.ObjectId(resolvedUserId);
+
+    // 3️⃣ Verify access
+    const hasAccess = await this.conversationModel.exists({
+      _id: conversationObjectId,
       isActive: true,
-      ...matchCondition,
-    }),
-  ]);
+      ...(userRole === "customer"
+        ? { customerId: resolvedObjectId }
+        : { barberId: resolvedObjectId }),
+    });
 
-  return {
-    conversations,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  };
-}
+    if (!hasAccess) {
+      throw new ForbiddenException(AccessDenied("conversation"));
+    }
 
+    const skip = (page - 1) * limit;
 
-async getConversationById(
-  conversationId: string,
-  userId: string,
-  userRole: 'customer' | 'barber',
-): Promise<ConversationDocument> {
-  // 1️⃣ Validate conversationId
-  if (!Types.ObjectId.isValid(conversationId)) {
-    throw new BadRequestException('Invalid Conversation ID');
-  }
-
-  const conversationObjectId = new Types.ObjectId(conversationId);
-
-  // 2️⃣ Resolve barberId if needed
-  const resolvedUserId =
-    userRole === 'customer' ? userId : await this.getBarberIdByUserId(userId);
-  const resolvedObjectId = new Types.ObjectId(resolvedUserId);
-
-  // 3️⃣ Role-based match condition
-  const matchCondition =
-    userRole === 'customer'
-      ? { customerId: resolvedObjectId }
-      : { barberId: resolvedObjectId };
-
-  // 4️⃣ Aggregate pipeline
-  const [conversation] = await this.conversationModel.aggregate([
-    { $match: { _id: conversationObjectId, isActive: true, ...matchCondition } },
-
-    // Join BARBER → BARBERS
-    {
-      $lookup: {
-        from: 'barbers',
-        localField: 'barberId',
-        foreignField: '_id',
-        as: 'barber',
-      },
-    },
-    { $unwind: '$barber' },
-
-    // Join CUSTOMER → USERS
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'customerId',
-        foreignField: '_id',
-        as: 'customer',
-      },
-    },
-    { $unwind: '$customer' },
-
-    // Join BARBER.userId → USERS
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'barber.userId',
-        foreignField: '_id',
-        as: 'barberUser',
-      },
-    },
-    {
-      $unwind: {
-        path: '$barberUser',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-
-    // Project clean response
-    {
-      $project: {
-        _id: 1,
-        type: 1,
-        bookingId: 1,
-        lastMessage: 1,
-        lastMessageAt: 1,
-        readStatus: 1,
-
-        customer: {
-          _id: '$customer._id',
-          name: '$customer.name',
-          avatarUrl: '$customer.avatarUrl',
-          phone: '$customer.phone',
-        },
-
-        barber: {
-          _id: '$barber._id',
-          shopName: '$barber.shopName',
-          images: '$barber.images',
-          rating: '$barber.rating',
-        },
-
-        barberUser: {
-          _id: '$barberUser._id',
-          name: '$barberUser.name',
-          avatarUrl: '$barberUser.avatarUrl',
-        },
-      },
-    },
-  ]);
-
-  if (!conversation) {
-    throw new NotFoundException('Conversation not found');
-  }
-
-  return conversation;
-}
-
-
-async getMessages(
-  conversationId: string,
-  userId: string,
-  userRole: 'customer' | 'barber',
-  page: number = 1,
-  limit: number = 50,
-): Promise<{
-  messages: ChatMessageDocument[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}> {
-  // 1️⃣ Validate inputs
-  if (!conversationId || !Types.ObjectId.isValid(conversationId)) {
-    throw new BadRequestException(IdRequired('Conversation'));
-  }
-
-  if (!userId || !Types.ObjectId.isValid(userId)) {
-    throw new BadRequestException(IdRequired('User'));
-  }
-
-  if (page < 1 || limit < 1) {
-    throw new BadRequestException(PAGELIMITPOSITIVE);
-  }
-
-  const conversationObjectId = new Types.ObjectId(conversationId);
-
-  // 2️⃣ Resolve barberId if needed
-  let resolvedUserId = userId;
-  if (userRole === 'barber') {
-    resolvedUserId = await this.getBarberIdByUserId(userId);
-  }
-  const resolvedObjectId = new Types.ObjectId(resolvedUserId);
-
-  // 3️⃣ Verify access
-  const hasAccess = await this.conversationModel.exists({
-    _id: conversationObjectId,
-    isActive: true,
-    ...(userRole === 'customer'
-      ? { customerId: resolvedObjectId }
-      : { barberId: resolvedObjectId }),
-  });
-
-  if (!hasAccess) {
-    throw new ForbiddenException(AccessDenied('conversation'));
-  }
-
-  const skip = (page - 1) * limit;
-
-  // 4️⃣ Fetch messages
-  const [messages, total] = await Promise.all([
-    this.chatMessageModel.aggregate([
-      { $match: { conversationId: conversationObjectId } },
-      { $sort: { sentAt: -1 } }, // latest first
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'fromUserId',
-          foreignField: '_id',
-          as: 'fromUser',
-        },
-      },
-      { $unwind: '$fromUser' },
-      {
-        $project: {
-          _id: 1,
-          conversationId: 1,
-          message: 1,
-          messageType: 1,
-          attachments: 1,
-          sentAt: 1,
-          status: 1,
-          fromUser: {
-            _id: '$fromUser._id',
-            name: '$fromUser.name',
-            avatarUrl: '$fromUser.avatarUrl',
+    // 4️⃣ Fetch messages
+    const [messages, total] = await Promise.all([
+      this.chatMessageModel.aggregate([
+        { $match: { conversationId: conversationObjectId } },
+        { $sort: { sentAt: -1 } }, // latest first
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: "users",
+            localField: "fromUserId",
+            foreignField: "_id",
+            as: "fromUser",
           },
         },
-      },
-    ]),
-    this.chatMessageModel.countDocuments({ conversationId: conversationObjectId }),
-  ]);
+        { $unwind: "$fromUser" },
+        {
+          $project: {
+            _id: 1,
+            conversationId: 1,
+            message: 1,
+            messageType: 1,
+            attachments: 1,
+            sentAt: 1,
+            status: 1,
+            fromUser: {
+              _id: "$fromUser._id",
+              name: "$fromUser.name",
+              avatarUrl: "$fromUser.avatarUrl",
+            },
+          },
+        },
+      ]),
+      this.chatMessageModel.countDocuments({
+        conversationId: conversationObjectId,
+      }),
+    ]);
 
-  return {
-    messages: messages.reverse(), // chronological order
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  };
-}
-
+    return {
+      messages: messages.reverse(), // chronological order
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 
   // async createMessage(data: {
   //   conversationId: string;
@@ -779,12 +782,19 @@ async getMessages(
     }
 
     const conversationObjectId = new Types.ObjectId(conversationId);
+    // Get barber _id if userId belongs to barber
+    const barberId = await this.getBarberIdByUserId(userId);
+
     const userObjectId = new Types.ObjectId(userId);
+    const barberObjectId = barberId ? new Types.ObjectId(barberId) : null;
 
     const exists = await this.conversationModel.exists({
       _id: conversationObjectId,
       isActive: true,
-      $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
+      $or: [
+        { customerId: userObjectId },
+        ...(barberObjectId ? [{ barberId: barberObjectId }] : []),
+      ],
     });
 
     return !!exists;
@@ -1028,9 +1038,9 @@ async getMessages(
   }
 
   private async getBarberIdByUserId(userId: string): Promise<string> {
-    const userObjectId = new Types.ObjectId(userId)
+    const userObjectId = new Types.ObjectId(userId);
     const barber = await this.barberModel
-      .findOne({ userId : userObjectId })
+      .findOne({ userId: userObjectId })
       .select("_id")
       .exec();
 
