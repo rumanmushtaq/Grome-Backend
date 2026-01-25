@@ -51,7 +51,7 @@ export class BarbersController {
   })
   async createBarber(
     @CurrentUser() user: any,
-    @Body() createBarberDto: CreateBarberDto
+    @Body() createBarberDto: CreateBarberDto,
   ): Promise<BarberResponseDto> {
     return this.barbersService.createBarber(user.userId, createBarberDto);
   }
@@ -68,7 +68,7 @@ export class BarbersController {
   })
   async updateBarber(
     @CurrentUser() user: any,
-    @Body() updateBarberDto: UpdateBarberDto
+    @Body() updateBarberDto: UpdateBarberDto,
   ): Promise<BarberResponseDto> {
     return this.barbersService.updateBarber(user.userId, updateBarberDto);
   }
@@ -105,13 +105,13 @@ export class BarbersController {
     @Query("latitude", ParseFloatPipe) latitude: number,
     @Query("longitude", ParseFloatPipe) longitude: number,
     @Query("radius", new DefaultValuePipe(10), ParseFloatPipe) radius: number,
-    @Query("type") type: "light" | "full" = "light"
+    @Query("type") type: "light" | "full" = "light",
   ): Promise<BarberResponseDto[]> {
     return this.barbersService.getNearbyBarbers(
       latitude,
       longitude,
       radius,
-      type
+      type,
     );
   }
 
@@ -121,7 +121,7 @@ export class BarbersController {
   async getAllBarbers(@Query() paginationDto: PaginationDto) {
     return this.barbersService.getAllBarbers(
       paginationDto.page,
-      paginationDto.limit
+      paginationDto.limit,
     );
   }
 
@@ -163,13 +163,22 @@ export class BarbersController {
   })
   async updateStatus(
     @CurrentUser() user: any,
-    @Body() body: { isOnline: boolean }
+    @Body() body: { isOnline: boolean },
   ): Promise<BarberResponseDto> {
     return this.barbersService.updateBarberStatus(user.userId, body.isOnline);
   }
 
-
-
-
-
+  @Get("by-service/:serviceId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+    @ApiBearerAuth()
+  @ApiParam({ name: "serviceId", description: "Service ID" })
+  @ApiResponse({
+    status: 200,
+    description: "Status updated successfully",
+    type: BarberResponseDto,
+  })
+  async getBarbersByService(@Param("serviceId") serviceId: string) {
+    return this.barbersService.getBarbersByService(serviceId);
+  }
 }

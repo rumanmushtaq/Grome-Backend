@@ -141,8 +141,7 @@ export class BookingsController {
   ): Promise<BookingResponseDto> {
     return this.bookingsService.cancelBooking(
       id,
-      user.userId,
-      user.role,
+      user,
       body.reason
     );
   }

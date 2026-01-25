@@ -35,6 +35,7 @@ import configuration from "./config/configuration";
 import { validationSchema } from "./config/validation.schema";
 import { CategoryModule } from "./modules/category/category.module";
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { BlockModule } from "./modules/blocks/blocks.module";
 
 @Module({
   imports: [
@@ -117,7 +118,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ReportsModule,
     CategoryModule,
     DashboardModule,
-    DashboardModule
+    DashboardModule,
+    BlockModule
   ],
 })
 export class AppModule {}

@@ -1,26 +1,26 @@
-import { Gender } from '@/modules/auth/enums/gender.enum';
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Gender } from "@/modules/auth/enums/gender.enum";
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type UserDocument = User & Document;
 
 export enum UserRole {
-  CUSTOMER = 'customer',
-  BARBER = 'barber',
-  ADMIN = 'admin',
+  CUSTOMER = "customer",
+  BARBER = "barber",
+  ADMIN = "admin",
 }
 
 export enum VerificationStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
+  PENDING = "pending",
+  APPROVED = "approved",
+  REJECTED = "rejected",
 }
 
 @Schema({ timestamps: true })
 export class User {
   _id?: any;
 
-  @Prop({ type: String, sparse: true})
+  @Prop({ type: String, sparse: true })
   email?: string;
 
   @Prop({ type: String, sparse: true })
@@ -35,10 +35,10 @@ export class User {
   @Prop()
   shopName?: string;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(UserRole), 
-    default: UserRole.CUSTOMER 
+  @Prop({
+    type: String,
+    enum: Object.values(UserRole),
+    default: UserRole.CUSTOMER,
   })
   role: UserRole;
 
@@ -54,15 +54,12 @@ export class User {
   @Prop()
   lastLoginAt?: Date;
 
-
   @Prop({ default: false })
   isDeleted: boolean;
 
-
- @Prop({ type: String, enum: Gender, default: Gender.OTHER })
+  @Prop({ type: String, enum: Gender, default: Gender.OTHER })
   gender?: Gender;
 
-  
   @Prop()
   emailVerifiedAt?: Date;
 
@@ -87,10 +84,12 @@ export class User {
   @Prop()
   passwordResetExpires?: Date;
 
+  @Prop()
+  lastSeen?: Date;
   // Social authentication
   @Prop({
     type: {
-      provider: { type: String, enum: ['google', 'facebook', 'apple'] },
+      provider: { type: String, enum: ["google", "facebook", "apple"] },
       providerId: String,
       providerEmail: String,
       providerName: String,
@@ -99,7 +98,7 @@ export class User {
     default: {},
   })
   socialAuth?: {
-    provider?: 'google' | 'facebook' | 'apple';
+    provider?: "google" | "facebook" | "apple";
     providerId?: string;
     providerEmail?: string;
     providerName?: string;
@@ -109,17 +108,17 @@ export class User {
   // KYC verification for barbers
   @Prop({
     type: {
-      status: { 
-        type: String, 
-        enum: Object.values(VerificationStatus), 
-        default: VerificationStatus.PENDING 
+      status: {
+        type: String,
+        enum: Object.values(VerificationStatus),
+        default: VerificationStatus.PENDING,
       },
       idDocUrl: String,
       certificateUrls: [String],
       notes: String,
       submittedAt: Date,
       reviewedAt: Date,
-      reviewedBy: { type: Types.ObjectId, ref: 'User' },
+      reviewedBy: { type: Types.ObjectId, ref: "User" },
     },
     default: {},
   })
@@ -141,8 +140,8 @@ export class User {
         push: { type: Boolean, default: true },
         sms: { type: Boolean, default: false },
       },
-      language: { type: String, default: 'en' },
-      timezone: { type: String, default: 'UTC' },
+      language: { type: String, default: "en" },
+      timezone: { type: String, default: "UTC" },
     },
     default: {},
   })
@@ -160,4 +159,3 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Indexes
-

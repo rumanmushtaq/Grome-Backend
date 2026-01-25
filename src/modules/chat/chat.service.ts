@@ -30,6 +30,9 @@ import {
   PAGELIMITPOSITIVE,
 } from "@/constants/messages.constants";
 import { Barber, BarberDocument } from "@/schemas/barber.schema";
+import { UserBlock, UserBlockDocument } from "@/schemas/user-block.schema";
+import { BlockService } from "../blocks/blocks.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
 export class ChatService {
@@ -40,6 +43,11 @@ export class ChatService {
     private conversationModel: Model<ConversationDocument>,
     @InjectModel(ChatMessage.name)
     private chatMessageModel: Model<ChatMessageDocument>,
+    @InjectModel(UserBlock.name)
+    private blocksModel: Model<UserBlockDocument>,
+
+    private readonly blockService: BlockService,
+    private readonly notificationsService: NotificationsService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
   ) {}
@@ -495,11 +503,11 @@ export class ChatService {
 
   async createMessage(data: {
     conversationId: string;
-
     message?: string;
     type?: MessageType;
     attachments?: any[];
     clientMessageId?: string;
+    replyToMessageId?: string;
     user: any;
   }): Promise<any> {
     const session = await this.chatMessageModel.startSession();
@@ -509,11 +517,11 @@ export class ChatService {
 
       const {
         conversationId,
-
         message,
         type = MessageType.TEXT,
         attachments = [],
         clientMessageId,
+        replyToMessageId,
         user,
       } = data;
       const fromUserId = user.userId;
@@ -526,37 +534,63 @@ export class ChatService {
         throw new BadRequestException("Invalid Sender User ID");
       }
 
-      const conversationObjectId = new Types.ObjectId(conversationId);
-      const fromUserObjectId = new Types.ObjectId(fromUserId);
-
-      // ✅ Verify access
-      const hasAccess = await this.verifyConversationAccess(
+      // ✅ Assert access & block
+      const { otherParticipantId } = await this.assertConversationAccess(
         conversationId,
         user,
       );
 
-      if (!hasAccess) {
-        throw new ForbiddenException("Access denied to conversation");
-      }
+      const conversationObjectId = new Types.ObjectId(conversationId);
+      const fromUserObjectId = new Types.ObjectId(fromUserId);
+      const toUserObjectId = new Types.ObjectId(otherParticipantId);
+
+      // ✅ Verify access
+      // const hasAccess = await this.verifyConversationAccess(
+      //   conversationId,
+      //   user,
+      // );
+
+      // if (!hasAccess) {
+      //   throw new ForbiddenException("Access denied to conversation");
+      // }
 
       // ✅ Fetch conversation inside transaction
-      const conversation = await this.conversationModel
-        .findOne(
-          { _id: conversationObjectId, isActive: true },
-          { customerId: 1, barberId: 1 },
-        )
-        .session(session);
+      // const conversation = await this.conversationModel
+      //   .findOne(
+      //     { _id: conversationObjectId, isActive: true },
+      //     { customerId: 1, barberId: 1 },
+      //   )
+      //   .session(session);
 
-      if (!conversation) {
-        throw new NotFoundException("Conversation not found");
+      // if (!conversation) {
+      //   throw new NotFoundException("Conversation not found");
+      // }
+
+      // ✅ Validate reply-to message (if provided)
+      let replyToObjectId: Types.ObjectId | null = null;
+
+      if (replyToMessageId) {
+        if (!Types.ObjectId.isValid(replyToMessageId)) {
+          throw new BadRequestException("Invalid replyToMessageId");
+        }
+
+        const parentMessage = await this.chatMessageModel
+          .findOne(
+            {
+              _id: replyToMessageId,
+              conversationId: conversationObjectId,
+              isDeleted: false,
+            },
+            { _id: 1 },
+          )
+          .lean<{ _id: Types.ObjectId }>();
+
+        if (!parentMessage) {
+          throw new NotFoundException("Reply message not found");
+        }
+
+        replyToObjectId = parentMessage._id;
       }
-
-      // ✅ Resolve recipient
-
-
-      const toUserObjectId = user.role === "customer"
-        ? conversation.barberId
-        : conversation.customerId;
 
       // ✅ Normalize attachments
       const normalizedAttachments = attachments.map((att, index) => {
@@ -585,6 +619,7 @@ export class ChatService {
             type,
             message,
             attachments: normalizedAttachments,
+            replyToMessageId: replyToObjectId,
             status: MessageStatus.SENT,
             sentAt: new Date(),
             clientMessageId,
@@ -595,7 +630,6 @@ export class ChatService {
 
       // ✅ Update conversation metadata
       const recipientField = user.role;
-
       await this.conversationModel.updateOne(
         { _id: conversationObjectId },
         {
@@ -626,6 +660,21 @@ export class ChatService {
           },
         },
         { $unwind: "$fromUser" },
+
+        {
+          $lookup: {
+            from: "chatmessages",
+            localField: "replyToMessageId",
+            foreignField: "_id",
+            as: "replyTo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$replyTo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
         {
           $project: {
             _id: 1,
@@ -635,6 +684,10 @@ export class ChatService {
             attachments: 1,
             sentAt: 1,
             status: 1,
+            replyTo: {
+              _id: "$replyTo._id",
+              message: "$replyTo.message",
+            },
             fromUser: {
               _id: "$fromUser._id",
               name: "$fromUser.name",
@@ -660,6 +713,11 @@ export class ChatService {
             message || (normalizedAttachments.length ? "📎 Attachment" : ""),
           lastMessageAt: populatedMessage[0].sentAt,
         },
+      );
+
+      // Send notification
+      await this.notificationsService.sendMessageNotification(
+        populatedMessage[0],
       );
 
       return populatedMessage[0];
@@ -705,10 +763,7 @@ export class ChatService {
     await message.save();
   }
 
-  async markMessagesAsRead(
-    conversationId: string,
-    user: any,
-  ): Promise<void> {
+  async markMessagesAsRead(conversationId: string, user: any): Promise<void> {
     // ✅ Validate ObjectIds
     if (
       !Types.ObjectId.isValid(conversationId) ||
@@ -721,10 +776,7 @@ export class ChatService {
     const userObjectId = new Types.ObjectId(user.userId);
 
     // ✅ Verify access
-    const hasAccess = await this.verifyConversationAccess(
-      conversationId,
-      user,
-    );
+    const hasAccess = await this.verifyConversationAccess(conversationId, user);
 
     if (!hasAccess) {
       throw new ForbiddenException(AccessDenied("conversation"));
@@ -770,36 +822,58 @@ export class ChatService {
   async verifyConversationAccess(
     conversationId: string,
     user: any,
-  ): Promise<boolean> {
+  ): Promise<{ allowed: boolean; otherParticipantId?: string }> {
     if (
       !Types.ObjectId.isValid(conversationId) ||
       !Types.ObjectId.isValid(user.userId)
     ) {
+      return { allowed: false };
+    }
+
+    // Resolve participant ID
+    let participantId: string;
+    if (user.role === "customer") participantId = user.userId;
+    else if (user.role === "barber")
+      participantId = await this.getBarberIdByUserId(user.userId);
+    else return { allowed: false };
+
+    const participantObjectId = new Types.ObjectId(participantId);
+
+    // Fetch conversation (lean for performance)
+    const conversation = await this.conversationModel
+      .findOne(
+        {
+          _id: conversationId,
+          isActive: true,
+          $or: [
+            { customerId: participantObjectId },
+            { barberId: participantObjectId },
+          ],
+        },
+        { customerId: 1, barberId: 1 },
+      )
+      .lean();
+
+    if (!conversation) return { allowed: false };
+
+    // Determine the other participant
+    const otherParticipantId =
+      conversation.customerId.toString() === participantObjectId.toString()
+        ? conversation.barberId.toString()
+        : conversation.customerId.toString();
+
+    return { allowed: true, otherParticipantId };
+  }
+
+  async verifyIsBlocked(userAId: string, userBId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(userAId) || !Types.ObjectId.isValid(userBId)) {
       return false;
     }
 
-    const conversationObjectId = new Types.ObjectId(conversationId);
-    // Get barber _id if userId belongs to barber
-    const userStringId =
-      user.role === "customer"
-        ? user.userId
-        : await this.getBarberIdByUserId(user.userId);
-
-    const userObjectId = new Types.ObjectId(userStringId);
-
-    const exists = await this.conversationModel.exists({
-      _id: conversationObjectId,
-      isActive: true,
-      $or: [{ customerId: userObjectId }, { barberId: userObjectId }],
-    });
-
-    return !!exists;
+    return this.blockService.isBlocked(userAId, userBId);
   }
 
-  async archiveConversation(
-    conversationId: string,
-    user: any,
-  ): Promise<void> {
+  async archiveConversation(conversationId: string, user: any): Promise<void> {
     if (
       !Types.ObjectId.isValid(conversationId) ||
       !Types.ObjectId.isValid(user.userId)
@@ -810,10 +884,7 @@ export class ChatService {
     const conversationObjectId = new Types.ObjectId(conversationId);
     const userObjectId = new Types.ObjectId(user.userId);
 
-    const hasAccess = await this.verifyConversationAccess(
-      conversationId,
-      user,
-    );
+    const hasAccess = await this.verifyConversationAccess(conversationId, user);
 
     if (!hasAccess) {
       throw new ForbiddenException("Access denied to conversation");
@@ -848,10 +919,7 @@ export class ChatService {
 
     const conversationObjectId = new Types.ObjectId(conversationId);
 
-    const hasAccess = await this.verifyConversationAccess(
-      conversationId,
-      user,
-    );
+    const hasAccess = await this.verifyConversationAccess(conversationId, user);
 
     if (!hasAccess) {
       throw new ForbiddenException("Access denied to conversation");
@@ -932,8 +1000,8 @@ export class ChatService {
     const userObjectId = new Types.ObjectId(user.userId);
     const skip = (page - 1) * limit;
 
-      // Escape regex to prevent injection
-  const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Escape regex to prevent injection
+    const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     // ✅ Build aggregation pipeline
     const pipeline: any[] = [];
@@ -957,7 +1025,7 @@ export class ChatService {
       pipeline.push({
         $match: {
           conversationId: conversationObjectId,
-          message: { $regex: safeQuery, $options: 'i' },
+          message: { $regex: safeQuery, $options: "i" },
         },
       });
     } else {
@@ -979,7 +1047,7 @@ export class ChatService {
             { "conversation.barberId": userObjectId },
           ],
           "conversation.isActive": true,
-          message: { $regex: safeQuery, $options: 'i' },
+          message: { $regex: safeQuery, $options: "i" },
         },
       });
     }
@@ -1164,5 +1232,114 @@ export class ChatService {
         },
       },
     ];
+  }
+
+  async updateLastSeen(userId: string): Promise<void> {
+    await this.userModel.updateOne({ _id: userId }, { lastSeen: new Date() });
+  }
+
+  // -----------------------------
+  // 3️⃣ Strict assertion (throws if blocked or no access)
+  // -----------------------------
+  async assertConversationAccess(
+    conversationId: string,
+    user: any,
+  ): Promise<{ otherParticipantId: string }> {
+    const access = await this.verifyConversationAccess(conversationId, user);
+
+    if (!access.allowed || !access.otherParticipantId) {
+      throw new ForbiddenException("Access denied to conversation");
+    }
+
+    const isBlocked = await this.verifyIsBlocked(
+      user.userId,
+      access.otherParticipantId,
+    );
+    if (isBlocked) {
+      throw new ForbiddenException("User is blocked");
+    }
+
+    return { otherParticipantId: access.otherParticipantId };
+  }
+
+  // -----------------------------
+  // Soft Delete a Conversation
+  // -----------------------------
+  async deleteConversation(conversationId: string, userId: string) {
+    if (
+      !Types.ObjectId.isValid(conversationId) ||
+      !Types.ObjectId.isValid(userId)
+    ) {
+      throw new BadRequestException("Invalid IDs");
+    }
+
+    const conversation = await this.conversationModel.findById(conversationId);
+    if (!conversation || conversation.isDeleted)
+      throw new NotFoundException("Conversation not found");
+
+    // Only participants can delete
+    const participantIds = [
+      conversation.customerId.toString(),
+      conversation.barberId.toString(),
+    ];
+    if (!participantIds.includes(userId))
+      throw new ForbiddenException("You cannot delete this conversation");
+
+    conversation.isDeleted = true;
+    conversation.deletedAt = new Date();
+    await conversation.save();
+
+    // Soft delete all messages in this conversation
+    await this.chatMessageModel.updateMany(
+      { conversationId, isDeleted: false },
+      { $set: { isDeleted: true, deletedAt: new Date() } },
+    );
+
+    // Notify participants
+    this.chatGateway.sendToConversation(
+      conversationId.toString(),
+      "conversation_deleted",
+      {
+        conversationId,
+      },
+    );
+
+    return { success: true };
+  }
+
+  // -----------------------------
+  // Soft Delete a Message
+  // -----------------------------
+  async deleteMessage(messageId: string, userId: string) {
+    if (!Types.ObjectId.isValid(messageId) || !Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException("Invalid IDs");
+    }
+
+    const message = await this.chatMessageModel.findById(messageId);
+    if (!message || message.isDeleted)
+      throw new NotFoundException("Message not found");
+
+    // Only sender or conversation participant can delete
+    if (
+      message.fromUserId.toString() !== userId &&
+      message.toUserId.toString() !== userId
+    ) {
+      throw new ForbiddenException("You cannot delete this message");
+    }
+
+    message.isDeleted = true;
+    message.deletedAt = new Date();
+    await message.save();
+
+    // Notify participants
+    this.chatGateway.sendToConversation(
+      message.conversationId.toString(),
+      "message_deleted",
+      {
+        messageId,
+      },
+    );
+
+    return { success: true };
   }
 }

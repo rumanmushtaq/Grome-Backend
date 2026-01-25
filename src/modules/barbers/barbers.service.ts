@@ -535,51 +535,51 @@ export class BarbersService {
 
       // ✅ SERVICE LOOKUP (FIXED)
       {
-  $lookup: {
-    from: "services",
-    let: {
-      serviceIds: {
-        $map: {
-          input: {
-            $ifNull: ["$services", []], // 🛡️ critical fix
-          },
-          as: "s",
-          in: {
-            $cond: [
-              { $eq: [{ $type: "$$s.serviceId" }, "objectId"] },
-              "$$s.serviceId",
-              {
-                $cond: [
-                  { $eq: [{ $type: "$$s.serviceId" }, "string"] },
-                  { $toObjectId: "$$s.serviceId" },
-                  null,
-                ],
+        $lookup: {
+          from: "services",
+          let: {
+            serviceIds: {
+              $map: {
+                input: {
+                  $ifNull: ["$services", []], // 🛡️ critical fix
+                },
+                as: "s",
+                in: {
+                  $cond: [
+                    { $eq: [{ $type: "$$s.serviceId" }, "objectId"] },
+                    "$$s.serviceId",
+                    {
+                      $cond: [
+                        { $eq: [{ $type: "$$s.serviceId" }, "string"] },
+                        { $toObjectId: "$$s.serviceId" },
+                        null,
+                      ],
+                    },
+                  ],
+                },
               },
-            ],
+            },
           },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ["$_id", "$$serviceIds"],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                duration: 1,
+                price: 1,
+              },
+            },
+          ],
+          as: "serviceDetails",
         },
       },
-    },
-    pipeline: [
-      {
-        $match: {
-          $expr: {
-            $in: ["$_id", "$$serviceIds"],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          duration: 1,
-          price: 1,
-        },
-      },
-    ],
-    as: "serviceDetails",
-  },
-},
 
       // 🔒 SECURITY
       {
@@ -834,6 +834,73 @@ export class BarbersService {
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
       distance: barber.distance, // This will be present in geo queries
+    };
+  }
+
+  async getBarbersByService(serviceId: string) {
+    const pipeline: any[] = [
+      {
+        $match: {
+          isActive: true,
+          "services.serviceId": new Types.ObjectId(serviceId),
+        },
+      },
+
+      // 1️⃣ Lookup user details
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+
+      // 2️⃣ Lookup service details if your services collection exists
+      {
+        $lookup: {
+          from: "services", // MongoDB collection name for services
+          localField: "services.serviceId", // array of ObjectIds in barber
+          foreignField: "_id",
+          as: "serviceDetails",
+        },
+      },
+
+      // 3️⃣ Remove sensitive fields
+      {
+        $project: {
+          "user.password": 0,
+          "user.preferences": 0,
+          "user.phoneVerificationExpires": 0,
+          "user.phoneVerificationId": 0,
+          "user.socialAuth": 0,
+          "user.verification": 0,
+          "user.passwordHash": 0,
+          "user.__v": 0,
+        },
+      },
+
+      // 4️⃣ Sort by creation date descending (optional)
+      { $sort: { createdAt: -1 } },
+    ];
+
+    const [barbers, totalCount] = await Promise.all([
+      this.barberModel.aggregate(pipeline).exec(),
+      this.barberModel.countDocuments({
+        isActive: true,
+        "services.serviceId": new Types.ObjectId(serviceId),
+      }),
+    ]);
+
+    return {
+      barbers: barbers.map((barber) =>
+        this.mapToBarberUserDetailResponseDto({
+          ...barber,
+          services: barber.serviceDetails, // map services properly
+        }),
+      ),
+      total: totalCount,
     };
   }
 }

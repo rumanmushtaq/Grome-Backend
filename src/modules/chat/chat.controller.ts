@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Delete,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -26,13 +27,17 @@ import { PaginationDto } from "../../dto/common/pagination.dto";
 import { MessageType } from "../../schemas/chat-message.schema";
 import { CreateConversationDto, CreateMessageDto } from "./dtos/chat.dto";
 import { userInfo } from "os";
+import { ChatGateway } from "./chat.gateway";
 
 @ApiTags("chat")
 @Controller("chat")
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly chatGateway: ChatGateway,
+  ) {}
 
   @Post("conversations")
   @ApiOperation({ summary: "Create a new conversation" })
@@ -109,13 +114,14 @@ export class ChatController {
     @CurrentUser() user: any,
     @Body() body: CreateMessageDto,
   ) {
-    console.log("user", user)
+    console.log("user", user);
     return this.chatService.createMessage({
       conversationId: id,
       message: body.message,
       type: body.type as MessageType,
       attachments: body.attachments,
-      user : user
+      replyToMessageId : body.replyToMessageId,
+      user: user,
     });
   }
 
@@ -179,5 +185,28 @@ export class ChatController {
       paginationDto.page,
       paginationDto.limit,
     );
+  }
+
+  @Get("users/:id/online-status")
+  getOnlineStatus(@Param("id") userId: string) {
+    return {
+      online: this.chatGateway["isUserOnline"](userId),
+    };
+  }
+
+  @Delete("message/:id")
+  async deleteMessage(
+    @Param("id") messageId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.chatService.deleteMessage(messageId, user.userId);
+  }
+
+  @Delete("conversation/:id")
+  async deleteConversation(
+    @Param("id") conversationId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.chatService.deleteConversation(conversationId, user.userId);
   }
 }

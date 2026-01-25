@@ -1,6 +1,6 @@
 import { MessageType } from '@/schemas/chat-message.schema';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsMongoId, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 
@@ -81,4 +81,13 @@ export class CreateMessageDto {
   @ValidateNested({ each: true })
   @Type(() => AttachmentDto)
   attachments?: AttachmentDto[];
+
+
+    @ApiPropertyOptional({
+    description: "Message ID this message is replying to",
+    example: "65a7c1a1b0f8a9c8e3d12345",
+  })
+  @IsOptional()
+  @IsMongoId()
+  replyToMessageId?: string;
 }

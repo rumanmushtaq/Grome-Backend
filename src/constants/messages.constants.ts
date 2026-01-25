@@ -49,4 +49,12 @@ export const AccessDenied = (text:string) => {
   return `Access denied to ${text}`
 }
 
-export const PAGELIMITPOSITIVE = "Page and limit must be positive numbers"
+export const PAGELIMITPOSITIVE = "Page and limit must be positive numbers";
+
+export const BLOCKEDYOURSELF = "You cannot block yourself";
+
+
+export const ALREADYBLOCKED = "User already blocked"
+
+
+export const FAILEDTO_BLOCK_UNBLOCK = (text:string) => `Failed to ${text} user`

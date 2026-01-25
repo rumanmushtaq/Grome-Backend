@@ -16,6 +16,9 @@ import {
 } from "../../schemas/chat-message.schema";
 import { User, UserSchema } from "../../schemas/user.schema";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { Barber, BarberSchema } from "@/schemas/barber.schema";
+import { UserBlock, UserBlockSchema } from "@/schemas/user-block.schema";
+import { BlockModule } from "../blocks/blocks.module";
 
 @Module({
   imports: [
@@ -23,6 +26,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
       { name: Conversation.name, schema: ConversationSchema },
       { name: ChatMessage.name, schema: ChatMessageSchema },
       { name: User.name, schema: UserSchema },
+      { name: Barber.name, schema: BarberSchema },
+      { name: UserBlock.name, schema: UserBlockSchema },
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -35,6 +40,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
       inject: [ConfigService],
     }),
     NotificationsModule,
+    BlockModule
   ],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway],

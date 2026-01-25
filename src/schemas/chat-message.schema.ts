@@ -1,52 +1,59 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export type ChatMessageDocument = ChatMessage & Document;
 
 export enum MessageType {
-  TEXT = 'text',
-  IMAGE = 'image',
-  FILE = 'file',
-  LOCATION = 'location',
-  SYSTEM = 'system',
+  TEXT = "text",
+  IMAGE = "image",
+  FILE = "file",
+  LOCATION = "location",
+  SYSTEM = "system",
 }
 
 export enum MessageStatus {
-  SENDING = 'sending',
-  SENT = 'sent',
-  DELIVERED = 'delivered',
-  READ = 'read',
-  FAILED = 'failed',
+  SENDING = "sending",
+  SENT = "sent",
+  DELIVERED = "delivered",
+  READ = "read",
+  FAILED = "failed",
 }
 
 @Schema({ timestamps: true })
 export class ChatMessage {
-  @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: "Conversation",
+    required: true,
+    index: true,
+  })
   conversationId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true, index: true })
   fromUserId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true, index: true })
   toUserId: Types.ObjectId;
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(MessageType), 
-    default: MessageType.TEXT 
+  @Prop({
+    type: String,
+    enum: Object.values(MessageType),
+    default: MessageType.TEXT,
   })
   type: MessageType;
 
   @Prop()
   message?: string;
 
-  @Prop([{
-    url: { type: String, required: true },
-    filename: String,
-    mimeType: String,
-    size: Number,
-    thumbnailUrl: String,
-  }])
+  @Prop([
+    {
+      url: { type: String, required: true },
+      filename: String,
+      mimeType: String,
+      size: Number,
+      thumbnailUrl: String,
+    },
+  ])
   attachments: Array<{
     url: string;
     filename?: string;
@@ -71,10 +78,10 @@ export class ChatMessage {
     name?: string;
   };
 
-  @Prop({ 
-    type: String, 
-    enum: Object.values(MessageStatus), 
-    default: MessageStatus.SENT 
+  @Prop({
+    type: String,
+    enum: Object.values(MessageStatus),
+    default: MessageStatus.SENT,
   })
   status: MessageStatus;
 
@@ -94,7 +101,7 @@ export class ChatMessage {
   failureReason?: string;
 
   // Message threading/replies
-  @Prop({ type: Types.ObjectId, ref: 'ChatMessage' })
+  @Prop({ type: Types.ObjectId, ref: "ChatMessage" })
   replyToMessageId?: Types.ObjectId;
 
   @Prop()
@@ -106,12 +113,20 @@ export class ChatMessage {
   @Prop()
   originalMessage?: string;
 
+  @Prop({ default: false })
+  isDeleted: boolean;
+
+  @Prop()
+  deletedAt?: Date;
+
   // Message reactions
-  @Prop([{
-    userId: { type: Types.ObjectId, ref: 'User', required: true },
-    emoji: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now },
-  }])
+  @Prop([
+    {
+      userId: { type: Types.ObjectId, ref: "User", required: true },
+      emoji: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ])
   reactions: Array<{
     userId: Types.ObjectId;
     emoji: string;

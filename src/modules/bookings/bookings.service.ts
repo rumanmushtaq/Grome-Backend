@@ -40,7 +40,7 @@ export class BookingsService {
     @InjectModel(Barber.name) private barberModel: Model<BarberDocument>,
     @InjectConnection() private readonly connection: Connection,
 
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // async createBooking(
@@ -208,124 +208,123 @@ export class BookingsService {
   // }
 
   async createBooking(
-  customerId: string,
-  createBookingDto: CreateBookingDto
-): Promise<BookingResponseDto> {
-  try {
-    const {
-      barberId,
-      services,
-      scheduledAt,
-      type,
-      location,
-      specialRequests,
-      customerNotes,
-      promoCodeId,
-    } = createBookingDto;
+    customerId: string,
+    createBookingDto: CreateBookingDto,
+  ): Promise<BookingResponseDto> {
+    try {
+      const {
+        barberId,
+        services,
+        scheduledAt,
+        type,
+        location,
+        specialRequests,
+        customerNotes,
+        promoCodeId,
+      } = createBookingDto;
 
-    // 1️⃣ Validate barber
-    const barber = await this.barberModel.findById(barberId).lean();
-    if (!barber || !barber.isActive) {
-      throw new NotFoundException("Barber not found or inactive");
-    }
+      // 1️⃣ Validate barber
+      const barber = await this.barberModel.findById(barberId).lean();
+      if (!barber || !barber.isActive) {
+        throw new NotFoundException("Barber not found or inactive");
+      }
 
-    // 2️⃣ Validate customer
-    const customer = await this.userModel.findById(customerId).lean();
-    if (!customer || !customer.isActive) {
-      throw new NotFoundException("Customer not found or inactive");
-    }
+      // 2️⃣ Validate customer
+      const customer = await this.userModel.findById(customerId).lean();
+      if (!customer || !customer.isActive) {
+        throw new NotFoundException("Customer not found or inactive");
+      }
 
-    // 3️⃣ Validate schedule
-    const scheduledDate = new Date(scheduledAt);
-    if (isNaN(scheduledDate.getTime())) {
-      throw new BadRequestException("Invalid scheduled date");
-    }
+      // 3️⃣ Validate schedule
+      const scheduledDate = new Date(scheduledAt);
+      if (isNaN(scheduledDate.getTime())) {
+        throw new BadRequestException("Invalid scheduled date");
+      }
 
-    const isAvailable = await this.checkBarberAvailability(
-      barberId,
-      scheduledDate
-    );
+      const isAvailable = await this.checkBarberAvailability(
+        barberId,
+        scheduledDate,
+      );
 
-    if (!isAvailable) {
-      throw new BadRequestException(
-        "Barber is not available at the scheduled time"
+      if (!isAvailable) {
+        throw new BadRequestException(
+          "Barber is not available at the scheduled time",
+        );
+      }
+
+      // 4️⃣ Validate services
+      if (!services || services.length === 0) {
+        throw new BadRequestException("At least one service is required");
+      }
+
+      const totalAmount = services.reduce(
+        (sum, service) => sum + service.price,
+        0,
+      );
+
+      if (totalAmount <= 0) {
+        throw new BadRequestException("Invalid service pricing");
+      }
+
+      const commissionRate = barber.commissionRate ?? 0;
+      const commission = totalAmount * commissionRate;
+      const payoutAmount = totalAmount - commission;
+
+      // 5️⃣ Create booking
+      const booking = await this.bookingModel.create({
+        customerId,
+        barberId,
+        services,
+        scheduledAt: scheduledDate,
+        type,
+        location: location
+          ? {
+              type: "Point",
+              coordinates: [location.longitude, location.latitude],
+              address: location.address,
+              city: location.city,
+              postalCode: location.postalCode,
+              country: location.country,
+            }
+          : undefined,
+        specialRequests,
+        customerNotes,
+        promoCodeId,
+        payment: {
+          status: "pending",
+          amount: totalAmount,
+          currency: "USD",
+          commission,
+          payoutAmount,
+        },
+        source: "mobile_app",
+      });
+
+      // 🔔 Side effects (async, non-blocking)
+      this.sendBookingNotifications(booking).catch(console.error);
+
+      return this.mapToResponseDto(booking);
+    } catch (error) {
+      console.error("Booking creation failed:", error);
+
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(
+        "Unable to create booking at this time",
       );
     }
-
-    // 4️⃣ Validate services
-    if (!services || services.length === 0) {
-      throw new BadRequestException("At least one service is required");
-    }
-
-    const totalAmount = services.reduce(
-      (sum, service) => sum + service.price,
-      0
-    );
-
-    if (totalAmount <= 0) {
-      throw new BadRequestException("Invalid service pricing");
-    }
-
-    const commissionRate = barber.commissionRate ?? 0;
-    const commission = totalAmount * commissionRate;
-    const payoutAmount = totalAmount - commission;
-
-    // 5️⃣ Create booking
-    const booking = await this.bookingModel.create({
-      customerId,
-      barberId,
-      services,
-      scheduledAt: scheduledDate,
-      type,
-      location: location
-        ? {
-            type: "Point",
-            coordinates: [location.longitude, location.latitude],
-            address: location.address,
-            city: location.city,
-            postalCode: location.postalCode,
-            country: location.country,
-          }
-        : undefined,
-      specialRequests,
-      customerNotes,
-      promoCodeId,
-      payment: {
-        status: "pending",
-        amount: totalAmount,
-        currency: "USD",
-        commission,
-        payoutAmount,
-      },
-      source: "mobile_app",
-    });
-
-    // 🔔 Side effects (async, non-blocking)
-    this.sendBookingNotifications(booking).catch(console.error);
-
-    return this.mapToResponseDto(booking);
-  } catch (error) {
-    console.error("Booking creation failed:", error);
-
-    if (
-      error instanceof BadRequestException ||
-      error instanceof NotFoundException
-    ) {
-      throw error;
-    }
-
-    throw new InternalServerErrorException(
-      "Unable to create booking at this time"
-    );
   }
-}
-
 
   async updateBooking(
     bookingId: string,
     updateBookingDto: UpdateBookingDto,
     userId: string,
-    userRole: string
+    userRole: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -351,18 +350,21 @@ export class BookingsService {
 
   async cancelBooking(
     bookingId: string,
-    userId: string,
-    userRole: string,
-    reason?: string
+    user: any,
+    reason?: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
 
+    const userId =
+      user.role === "customer"
+        ? user.userId
+        : await this.getBarberIdByUserId(user.userId);
     // Check permissions
     if (
-      userRole !== "admin" &&
+      user.role !== "admin" &&
       booking.customerId.toString() !== userId &&
       booking.barberId.toString() !== userId
     ) {
@@ -394,7 +396,7 @@ export class BookingsService {
   async getBookingById(
     bookingId: string,
     userId: string,
-    userRole: string
+    userRole: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -672,7 +674,7 @@ export class BookingsService {
 
   async acceptBooking(
     bookingId: string,
-    barberId: string
+    barberId: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -685,7 +687,7 @@ export class BookingsService {
 
     if (booking.status !== BookingStatus.REQUESTED) {
       throw new BadRequestException(
-        "Booking cannot be accepted in current status"
+        "Booking cannot be accepted in current status",
       );
     }
 
@@ -700,7 +702,7 @@ export class BookingsService {
 
   async startBooking(
     bookingId: string,
-    barberId: string
+    barberId: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -727,7 +729,7 @@ export class BookingsService {
   async completeBooking(
     bookingId: string,
     barberId: string,
-    barberNotes?: string
+    barberNotes?: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
@@ -761,7 +763,7 @@ export class BookingsService {
   private async checkBarberAvailability(
     barberId: string,
     scheduledAt: Date,
-    session?: ClientSession
+    session?: ClientSession,
   ): Promise<boolean> {
     // Check if there are any conflicting bookings
     const conflictingBooking = await this.bookingModel
@@ -1040,7 +1042,7 @@ export class BookingsService {
         0,
         0,
         0,
-        0
+        0,
       );
 
       const endOfDay = new Date(
@@ -1050,7 +1052,7 @@ export class BookingsService {
         23,
         59,
         59,
-        999
+        999,
       );
 
       const appointments = await this.bookingModel.aggregate([
@@ -1184,7 +1186,7 @@ export class BookingsService {
       const bookingStart = moment(booking.scheduledAt);
       const totalDuration = booking.services.reduce(
         (sum: number, s: any) => sum + s.duration,
-        0
+        0,
       );
       const bookingEnd = bookingStart.clone().add(totalDuration, "minutes");
       return { start: bookingStart, end: bookingEnd };
@@ -1219,7 +1221,7 @@ export class BookingsService {
   }
 
   private async sendBookingNotifications(
-    booking: BookingDocument
+    booking: BookingDocument,
   ): Promise<void> {
     try {
       const bookingId = booking._id.toString();
@@ -1257,5 +1259,15 @@ export class BookingsService {
       // 🔕 Never break booking flow
       console.error("Failed to send booking notifications", error);
     }
+  }
+
+  private async getBarberIdByUserId(userId: string): Promise<string> {
+    const userObjectId = new Types.ObjectId(userId);
+    const barber = await this.barberModel
+      .findOne({ userId: userObjectId })
+      .select("_id")
+      .exec();
+
+    return barber._id.toString();
   }
 }
