@@ -674,12 +674,13 @@ export class BookingsService {
 
   async acceptBooking(
     bookingId: string,
-    barberId: string,
+    userId: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
+    const barberId = await this.getBarberIdByUserId(userId);
 
     if (booking.barberId.toString() !== barberId) {
       throw new ForbiddenException("Not authorized to accept this booking");
