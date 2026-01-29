@@ -13,7 +13,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
-
+import { createHash } from "crypto";
 import { User, UserDocument } from "../../schemas/user.schema";
 import { Barber, BarberDocument } from "../../schemas/barber.schema";
 import {
@@ -54,12 +54,12 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
-    private readonly otpService: OtpService
+    private readonly otpService: OtpService,
   ) {}
 
   async signUp(
     signUpDto: SignUpDto,
-    deviceInfo?: any
+    deviceInfo?: any,
   ): Promise<AuthResponseDto> {
     const { email, phone, password, name, deviceId, deviceName, deviceType } =
       signUpDto;
@@ -71,7 +71,7 @@ export class AuthService {
 
     if (existingUser) {
       throw new ConflictException(
-        "User with this email or phone already exists"
+        "User with this email or phone already exists",
       );
     }
 
@@ -128,7 +128,7 @@ export class AuthService {
 
   async barberSignUp(
     barberSignUpDto: BarberSignUpDto,
-    deviceInfo?: any
+    deviceInfo?: any,
   ): Promise<AuthResponseDto> {
     const {
       name,
@@ -154,7 +154,7 @@ export class AuthService {
 
     if (existingUser) {
       throw new ConflictException(
-        "User with this email or phone already exists"
+        "User with this email or phone already exists",
       );
     }
 
@@ -241,7 +241,7 @@ export class AuthService {
 
   async signIn(
     signInDto: SignInDto,
-    deviceInfo?: any
+    deviceInfo?: any,
   ): Promise<AuthResponseDto> {
     const { identifier, password, deviceId, deviceName, deviceType } =
       signInDto;
@@ -295,10 +295,12 @@ export class AuthService {
   }
 
   async refreshToken(
-    refreshTokenDto: RefreshTokenDto
+    refreshTokenDto: RefreshTokenDto,
   ): Promise<AuthResponseDto> {
     const { refreshToken, deviceId } = refreshTokenDto;
 
+    const result = await this.hashToken(refreshToken);
+    console.log("result", result);
     // Find refresh token
     const tokenDoc = await this.refreshTokenModel.findOne({
       tokenHash: await this.hashToken(refreshToken),
@@ -325,7 +327,7 @@ export class AuthService {
         deviceId: deviceId || tokenDoc.deviceId,
         deviceName: tokenDoc.deviceName,
         deviceType: tokenDoc.deviceType,
-      }
+      },
     );
 
     return {
@@ -350,20 +352,20 @@ export class AuthService {
       const tokenHash = await this.hashToken(refreshToken);
       await this.refreshTokenModel.updateOne(
         { tokenHash, userId },
-        { isRevoked: true, revokedAt: new Date() }
+        { isRevoked: true, revokedAt: new Date() },
       );
     } else {
       // Revoke all refresh tokens for user
       await this.refreshTokenModel.updateMany(
         { userId, isRevoked: false },
-        { isRevoked: true, revokedAt: new Date() }
+        { isRevoked: true, revokedAt: new Date() },
       );
     }
   }
 
   async changePassword(
     userId: string,
-    changePasswordDto: ChangePasswordDto
+    changePasswordDto: ChangePasswordDto,
   ): Promise<void> {
     const { currentPassword, newPassword } = changePasswordDto;
 
@@ -375,7 +377,7 @@ export class AuthService {
     // Verify current password
     const isCurrentPasswordValid = await bcrypt.compare(
       currentPassword,
-      user.passwordHash
+      user.passwordHash,
     );
     if (!isCurrentPasswordValid) {
       throw new UnauthorizedException("Current password is incorrect");
@@ -392,7 +394,7 @@ export class AuthService {
     // Revoke all refresh tokens
     await this.refreshTokenModel.updateMany(
       { userId, isRevoked: false },
-      { isRevoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() },
     );
   }
 
@@ -419,7 +421,7 @@ export class AuthService {
   // }
 
   async forgotPassword(
-    forgotPasswordDto: ForgotPasswordDto
+    forgotPasswordDto: ForgotPasswordDto,
   ): Promise<ResponseDto> {
     try {
       const { email } = forgotPasswordDto;
@@ -470,7 +472,7 @@ export class AuthService {
 
       // Otherwise, throw generic internal server error
       throw new InternalServerErrorException(
-        "An error occurred while processing the password reset request"
+        "An error occurred while processing the password reset request",
       );
     }
   }
@@ -500,7 +502,7 @@ export class AuthService {
     // Revoke all refresh tokens
     await this.refreshTokenModel.updateMany(
       { userId: user._id, isRevoked: false },
-      { isRevoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() },
     );
   }
 
@@ -572,7 +574,7 @@ export class AuthService {
 
   async verifyPassword(
     password: string,
-    passwordHash: string
+    passwordHash: string,
   ): Promise<boolean> {
     return bcrypt.compare(password, passwordHash);
   }
@@ -693,7 +695,7 @@ export class AuthService {
 
   async socialSignIn(
     socialSignInDto: SocialSignInDto,
-    deviceInfo?: any
+    deviceInfo?: any,
   ): Promise<AuthResponseDto> {
     const { provider, idToken, deviceId, deviceName, deviceType } =
       socialSignInDto;
@@ -714,7 +716,7 @@ export class AuthService {
           case "google": {
             if (!isGoogleConfigured) {
               throw new BadRequestException(
-                "Google authentication is not configured"
+                "Google authentication is not configured",
               );
             }
             const { GoogleStrategy } = await import(
@@ -727,7 +729,7 @@ export class AuthService {
           case "facebook": {
             if (!isFacebookConfigured) {
               throw new BadRequestException(
-                "Facebook authentication is not configured"
+                "Facebook authentication is not configured",
               );
             }
             const { FacebookStrategy } = await import(
@@ -740,7 +742,7 @@ export class AuthService {
           case "apple": {
             if (!isAppleConfigured) {
               throw new BadRequestException(
-                "Apple authentication is not configured"
+                "Apple authentication is not configured",
               );
             }
             const { AppleStrategy } = await import(
@@ -756,7 +758,7 @@ export class AuthService {
       } catch (error) {
         // 🔴 Catch errors during social verification
         throw new UnauthorizedException(
-          `Social authentication failed: ${error.message}`
+          `Social authentication failed: ${error.message}`,
         );
       }
 
@@ -805,7 +807,7 @@ export class AuthService {
       } catch (error) {
         // 🔴 Catch database issues
         throw new InternalServerErrorException(
-          `User creation or lookup failed: ${error.message}`
+          `User creation or lookup failed: ${error.message}`,
         );
       }
 
@@ -834,7 +836,7 @@ export class AuthService {
         });
       } catch (error) {
         throw new InternalServerErrorException(
-          `Token generation failed: ${error.message}`
+          `Token generation failed: ${error.message}`,
         );
       }
 
@@ -861,7 +863,7 @@ export class AuthService {
       }
 
       throw new InternalServerErrorException(
-        "An unexpected error occurred during social sign-in"
+        "An unexpected error occurred during social sign-in",
       );
     }
   }
@@ -869,7 +871,7 @@ export class AuthService {
   private async generateTokens(
     userId: string,
     role: string,
-    deviceInfo?: any
+    deviceInfo?: any,
   ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
     const payload = { sub: userId, role };
     const accessToken = this.jwtService.sign(payload);
@@ -901,8 +903,8 @@ export class AuthService {
     };
   }
 
-  private async hashToken(token: string): Promise<string> {
-    return bcrypt.hash(token, 10);
+  private hashToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
   }
 
   private async revokeRefreshToken(tokenId: string): Promise<void> {

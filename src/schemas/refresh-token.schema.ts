@@ -8,7 +8,7 @@ export class RefreshToken {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, index: true })
   tokenHash: string;
 
   @Prop({ required: true })
@@ -18,7 +18,7 @@ export class RefreshToken {
   deviceName?: string;
 
   @Prop()
-  deviceType?: string; // 'mobile', 'web', 'desktop'
+  deviceType?: 'mobile' | 'web' | 'desktop';
 
   @Prop()
   ipAddress?: string;
@@ -35,13 +35,13 @@ export class RefreshToken {
   @Prop()
   revokedAt?: Date;
 
-  @Prop()
+  @Prop({ type: Types.ObjectId, ref: 'User' })
   revokedBy?: Types.ObjectId;
 
   @Prop()
-  revokedReason?: string;
+  revokedReason?: 'ROTATED' | 'LOGOUT' | 'SECURITY' | 'EXPIRED';
 
-  // Token rotation tracking
+  // 🔁 Rotation tracking
   @Prop({ type: Types.ObjectId, ref: 'RefreshToken' })
   replacedBy?: Types.ObjectId;
 
@@ -51,6 +51,7 @@ export class RefreshToken {
   @Prop({ default: false })
   isRotated: boolean;
 
+  // 📊 Usage tracking
   @Prop()
   lastUsedAt?: Date;
 
@@ -58,9 +59,13 @@ export class RefreshToken {
   usageCount: number;
 }
 
-export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);
+export const RefreshTokenSchema =
+  SchemaFactory.createForClass(RefreshToken);
 
-// Indexes
+// 🔎 Indexes
 RefreshTokenSchema.index({ userId: 1, isRevoked: 1 });
-RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 RefreshTokenSchema.index({ deviceId: 1, userId: 1 });
+RefreshTokenSchema.index(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 0 },
+);

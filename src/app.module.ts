@@ -118,7 +118,7 @@ import { BlockModule } from "./modules/blocks/blocks.module";
     ReportsModule,
     CategoryModule,
     DashboardModule,
-    DashboardModule,
+   
     BlockModule
   ],
 })
