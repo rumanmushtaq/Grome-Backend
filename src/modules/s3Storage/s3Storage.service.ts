@@ -5,7 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { S3 } from "aws-sdk";
-import { FILE_TYPE } from "./types/storageTypes";
+import { FILE_TYPE , ALLOWED_AUDIO_TYPES} from "./types/storageTypes";
 import { v4 as uuidv4 } from "uuid";
 import { User } from "@/schemas/user.schema";
 import { ErrorStatus } from "../auth/enums/role.enum";
@@ -18,6 +18,8 @@ const filename = path.basename(__filename);
 export class S3StorageService {
   constructor(@Inject("S3") private readonly S3: S3) {}
 
+  private readonly MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
+
   async uploadPublicFile(type: string, user: any, file: any) {
     try {
       if (!file) {
@@ -28,6 +30,17 @@ export class S3StorageService {
       const normalizedType = type.toLowerCase();
 
       let path = "";
+
+       // 🎧 Audio validation
+      if (normalizedType === FILE_TYPE.AUDIO) {
+        if (!ALLOWED_AUDIO_TYPES.includes(file.mimetype)) {
+          throw new BadRequestException('Invalid audio file type');
+        }
+
+        if (file.size > this.MAX_AUDIO_SIZE) {
+          throw new BadRequestException('Audio file size exceeds 10MB');
+        }
+      }
 
       switch (normalizedType) {
         case FILE_TYPE.TERMS_CONDITIONS:
@@ -64,6 +77,10 @@ export class S3StorageService {
 
         case FILE_TYPE.SUBSERVICE:
           path = `${user._id}/${FILE_TYPE.SUBSERVICE}/${uuidv4()}`;
+          break;
+
+        case FILE_TYPE.AUDIO:
+          path = `${FILE_TYPE.CHAT}/${user._id}/${uuidv4()}`;
           break;
 
         default:
