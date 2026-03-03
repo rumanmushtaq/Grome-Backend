@@ -8,6 +8,7 @@ export enum FILE_TYPE {
   KYC = 'kyc',
   SUBSERVICE = 'subservice',
   CATEGORY = 'category',
+  BANNER = 'banner',
     AUDIO = 'audio',
 
 }

@@ -36,6 +36,7 @@ import { validationSchema } from "./config/validation.schema";
 import { CategoryModule } from "./modules/category/category.module";
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { BlockModule } from "./modules/blocks/blocks.module";
+import { BannerModule } from './modules/banner/banner.module';
 
 @Module({
   imports: [
@@ -118,8 +119,8 @@ import { BlockModule } from "./modules/blocks/blocks.module";
     ReportsModule,
     CategoryModule,
     DashboardModule,
-   
-    BlockModule
+    BlockModule,
+    BannerModule
   ],
 })
 export class AppModule {}
