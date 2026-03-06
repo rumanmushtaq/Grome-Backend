@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "@/common/guards/roles.guard";
 import { Roles } from "@/common/decorators/roles.decorator";
+import { Public } from "@/common/decorators/public.decorator";
 import { UserRole } from "@/schemas/user.schema";
 
 @ApiTags("banners")
@@ -44,11 +45,13 @@ export class BannerController {
 
   // 🔐 Admin - Get All
   @Get()
+  @Public()
   findAll() {
     return this.bannerService.findAll();
   }
 
-  // 🌍 Website - Get Active Banners
+  // 🌍 Website - Get Active Banners (public - no auth required)
+  @Public()
   @Get("active")
   findActive() {
     return this.bannerService.findActive();

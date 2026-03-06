@@ -1,8 +1,9 @@
-import { Booking, BookingDocument } from "@/schemas/booking.schema";
+import { Booking, BookingDocument, BookingStatus } from "@/schemas/booking.schema";
 import { User, UserDocument } from "@/schemas/user.schema";
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
+import { TimeFilter, UserStatsResponseDto, DailyStatsDto } from "./dto/user-stats.dto";
 
 @Injectable()
 export class DashboardService {
@@ -149,5 +150,177 @@ export class DashboardService {
         data: [],
       };
     }
+  }
+
+  /**
+   * Get user stats including appointments, earnings, and time spent
+   * with time-based filtering (7d, 30d, 90d, etc.)
+   */
+  async getUserStats(
+    userId: string,
+    timeFilter: TimeFilter,
+    userRole: "customer" | "barber"
+  ): Promise<UserStatsResponseDto> {
+    try {
+      const { startDate, endDate } = this.getDateRange(timeFilter);
+
+      // Build query based on user role
+      const query: any = {
+        status: BookingStatus.COMPLETED,
+        completedAt: { $gte: startDate, $lte: endDate },
+      };
+
+      if (userRole === "customer") {
+        query.customerId = new Types.ObjectId(userId);
+      } else {
+        query.barberId = new Types.ObjectId(userId);
+      }
+
+      // Fetch completed bookings within the date range
+      const bookings = await this.bookingModel.find(query).lean();
+
+      // Calculate totals
+      let totalAppointments = 0;
+      let totalEarnings = 0;
+      let totalTimeMinutes = 0;
+
+      // Initialize daily stats map
+      const dailyStatsMap = new Map<string, DailyStatsDto>();
+
+      // Generate all dates in the range for the chart
+      const days = this.generateDateRange(startDate, endDate);
+      for (const day of days) {
+        dailyStatsMap.set(day.date, {
+          date: day.date,
+          day: day.day,
+          appointments: 0,
+          earnings: 0,
+          totalTimeMinutes: 0,
+        });
+      }
+
+      // Process bookings
+      for (const booking of bookings) {
+        totalAppointments++;
+
+        // Calculate earnings (payout amount for barber, or total amount for customer view)
+        const earnings =
+          userRole === "barber"
+            ? booking.payment?.payoutAmount || 0
+            : booking.payment?.amount || 0;
+        totalEarnings += earnings;
+
+        // Calculate total time from services
+        const bookingTimeMinutes =
+          booking.services?.reduce(
+            (sum, service) => sum + (service.duration || 0),
+            0
+          ) || 0;
+        totalTimeMinutes += bookingTimeMinutes;
+
+        // Group by date for daily stats
+        if (booking.completedAt) {
+          const dateKey = this.formatDateKey(booking.completedAt);
+          const dayStats = dailyStatsMap.get(dateKey);
+          if (dayStats) {
+            dayStats.appointments += 1;
+            dayStats.earnings += earnings;
+            dayStats.totalTimeMinutes += bookingTimeMinutes;
+          }
+        }
+      }
+
+      // Convert map to array and sort by date
+      const dailyStats = Array.from(dailyStatsMap.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      return {
+        totalAppointments,
+        totalEarnings: Number(totalEarnings.toFixed(2)),
+        totalTimeHours: Number((totalTimeMinutes / 60).toFixed(1)),
+        currency: "USD",
+        dailyStats,
+        startDate,
+        endDate,
+        timeFilter,
+      };
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+      throw new InternalServerErrorException("Failed to fetch user statistics");
+    }
+  }
+
+  /**
+   * Get date range based on time filter
+   */
+  private getDateRange(timeFilter: TimeFilter): { startDate: Date; endDate: Date } {
+    const now = new Date();
+    const endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
+    const startDate = new Date(now);
+    startDate.setHours(0, 0, 0, 0);
+
+    switch (timeFilter) {
+      case TimeFilter.LAST_7_DAYS:
+        startDate.setDate(now.getDate() - 6);
+        break;
+      case TimeFilter.LAST_30_DAYS:
+        startDate.setDate(now.getDate() - 29);
+        break;
+      case TimeFilter.LAST_90_DAYS:
+        startDate.setDate(now.getDate() - 89);
+        break;
+      case TimeFilter.THIS_MONTH:
+        startDate.setDate(1);
+        break;
+      case TimeFilter.LAST_MONTH:
+        startDate.setMonth(now.getMonth() - 1);
+        startDate.setDate(1);
+        endDate.setMonth(now.getMonth());
+        endDate.setDate(0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case TimeFilter.THIS_YEAR:
+        startDate.setMonth(0, 1);
+        break;
+      case TimeFilter.ALL_TIME:
+        startDate.setFullYear(2000, 0, 1);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 6);
+    }
+
+    return { startDate, endDate };
+  }
+
+  /**
+   * Generate array of dates for the chart
+   */
+  private generateDateRange(startDate: Date, endDate: Date): Array<{ date: string; day: string }> {
+    const days = [];
+    const current = new Date(startDate);
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    while (current <= endDate) {
+      days.push({
+        date: this.formatDateKey(current),
+        day: dayNames[current.getDay()],
+      });
+      current.setDate(current.getDate() + 1);
+    }
+
+    return days;
+  }
+
+  /**
+   * Format date as YYYY-MM-DD
+   */
+  private formatDateKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 }

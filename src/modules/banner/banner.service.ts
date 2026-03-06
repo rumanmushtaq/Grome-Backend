@@ -19,10 +19,16 @@ export class BannerService {
 
   /* ============================= CREATE ============================= */
 
-  async create(dto: CreateBannerDto): Promise<Banner> {
+  async create(dto: CreateBannerDto) {
     try {
       const banner = new this.bannerModel(dto);
-      return await banner.save();
+      const saved = await banner.save();
+
+      return {
+        success: true,
+        message: 'Banner created successfully',
+        data: saved,
+      };
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -30,9 +36,19 @@ export class BannerService {
 
   /* ============================= FIND ALL ============================= */
 
-  async findAll(): Promise<Banner[]> {
+  async findAll() {
     try {
-      return await this.bannerModel.find().sort({ order: 1 }).lean().exec();
+      const banners = await this.bannerModel
+        .find()
+        .sort({ order: 1 })
+        .lean()
+        .exec();
+
+      return {
+        success: true,
+        message: 'Banners fetched successfully',
+        data: banners,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         'Failed to fetch banners. Please try again later.',
@@ -42,11 +58,11 @@ export class BannerService {
 
   /* ============================= FIND ACTIVE ============================= */
 
-  async findActive(): Promise<Banner[]> {
+  async findActive() {
     try {
       const now = new Date();
 
-      return await this.bannerModel
+      const banners = await this.bannerModel
         .find({
           isActive: true,
           $and: [
@@ -61,6 +77,12 @@ export class BannerService {
         .sort({ order: 1 })
         .lean()
         .exec();
+
+      return {
+        success: true,
+        message: 'Active banners fetched successfully',
+        data: banners,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         'Failed to fetch active banners.',
@@ -70,7 +92,7 @@ export class BannerService {
 
   /* ============================= FIND ONE ============================= */
 
-  async findOne(id: string): Promise<Banner> {
+  async findOne(id: string) {
     try {
       if (!isValidObjectId(id)) {
         throw new BadRequestException(InvalidId('Invalid banner ID format'));
@@ -82,7 +104,11 @@ export class BannerService {
         throw new NotFoundException(NotFound('Banner'));
       }
 
-      return banner;
+      return {
+        success: true,
+        message: 'Banner fetched successfully',
+        data: banner,
+      };
     } catch (error) {
       this.handleServiceError(error, 'Failed to fetch banner.');
     }
@@ -90,7 +116,7 @@ export class BannerService {
 
   /* ============================= UPDATE ============================= */
 
-  async update(id: string, dto: UpdateBannerDto): Promise<Banner> {
+  async update(id: string, dto: UpdateBannerDto) {
     try {
       if (!isValidObjectId(id)) {
         throw new BadRequestException(InvalidId('Invalid banner ID format'));
@@ -105,7 +131,11 @@ export class BannerService {
         throw new NotFoundException(NotFound('Banner'));
       }
 
-      return banner;
+      return {
+        success: true,
+        message: 'Banner updated successfully',
+        data: banner,
+      };
     } catch (error) {
       this.handleServiceError(error, 'Failed to update banner.');
     }
@@ -113,7 +143,7 @@ export class BannerService {
 
   /* ============================= DELETE ============================= */
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(id: string) {
     try {
       if (!isValidObjectId(id)) {
         throw new BadRequestException(InvalidId('Invalid banner ID format'));
@@ -125,7 +155,11 @@ export class BannerService {
         throw new NotFoundException(NotFound('Banner'));
       }
 
-      return { message: 'Banner deleted successfully' };
+      return {
+        success: true,
+        message: 'Banner deleted successfully',
+        data: banner,
+      };
     } catch (error) {
       this.handleServiceError(error, 'Failed to delete banner.');
     }
@@ -133,10 +167,7 @@ export class BannerService {
 
   /* ============================= UPDATE STATUS ============================= */
 
-  async updateStatus(
-    id: string,
-    isActive: boolean,
-  ): Promise<{ message: string; data: Banner }> {
+  async updateStatus(id: string, isActive: boolean) {
     try {
       if (!isValidObjectId(id)) {
         throw new BadRequestException(InvalidId('Invalid banner ID format'));
@@ -150,6 +181,7 @@ export class BannerService {
 
       if (banner.isActive === isActive) {
         return {
+          success: true,
           message: `Banner is already ${isActive ? 'active' : 'inactive'}`,
           data: banner,
         };
@@ -159,6 +191,7 @@ export class BannerService {
       const updated = await banner.save();
 
       return {
+        success: true,
         message: `Banner ${
           isActive ? 'activated' : 'deactivated'
         } successfully`,
@@ -172,12 +205,10 @@ export class BannerService {
   /* ============================= COMMON ERROR HANDLER ============================= */
 
   private handleDatabaseError(error: any): never {
-    // Duplicate key error
     if (error?.code === 11000) {
       throw new BadRequestException('Duplicate field value entered.');
     }
 
-    // Validation error
     if (error?.name === 'ValidationError') {
       throw new BadRequestException(error.message);
     }
