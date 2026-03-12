@@ -4,9 +4,10 @@ import {
   IsBoolean,
   IsNumber,
   IsUrl,
-  IsDateString,
+  IsDate,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CreateBannerDto {
   @ApiPropertyOptional({ example: "20% percent off" })
@@ -38,14 +39,16 @@ export class CreateBannerDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ example: true })
+  @ApiPropertyOptional({ example: "2026-03-15T00:00:00.000Z" })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   startDate?: Date;
 
-  @ApiPropertyOptional({ example: true })
+  @ApiPropertyOptional({ example: "2026-03-31T23:59:59.000Z" })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   endDate?: Date;
 }
 
@@ -80,14 +83,16 @@ export class UpdateBannerDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ example: "asd" })
+  @ApiPropertyOptional({ example: "2026-03-15T00:00:00.000Z" })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   startDate?: Date;
 
-  @ApiPropertyOptional({ example: "asd" })
+  @ApiPropertyOptional({ example: "2026-03-31T23:59:59.000Z" })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   endDate?: Date;
 }
 

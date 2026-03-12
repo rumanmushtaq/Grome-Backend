@@ -58,6 +58,7 @@ export class BannerController {
   }
 
   @Get(":id")
+  @Public()
   findOne(@Param("id") id: string) {
     return this.bannerService.findOne(id);
   }
@@ -74,6 +75,8 @@ export class BannerController {
     return this.bannerService.updateStatus(id, dto.isActive);
   }
 
+  @ApiBearerAuth()
+  @Roles(UserRole.ADMIN)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.bannerService.remove(id);
