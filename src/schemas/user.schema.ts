@@ -154,6 +154,10 @@ export class User {
     language: string;
     timezone: string;
   };
+
+  // Stripe customer ID for payments
+  @Prop()
+  stripeCustomerId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

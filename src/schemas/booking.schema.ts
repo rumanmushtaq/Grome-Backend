@@ -4,12 +4,14 @@ import { Document, Types } from "mongoose";
 export type BookingDocument = Booking & Document;
 
 export enum BookingStatus {
+  PENDING_PAYMENT = "pending_payment",  // New: Awaiting payment
   REQUESTED = "requested",
   ACCEPTED = "accepted",
   IN_PROGRESS = "in_progress",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   NO_SHOW = "no_show",
+  PAYMENT_FAILED = "payment_failed",      // New: Payment failed
 }
 
 export enum BookingType {
@@ -201,6 +203,13 @@ export class Booking {
 
   @Prop()
   recurringEndDate?: Date;
+
+  // Payment timeout tracking
+  @Prop()
+  paymentExpiresAt?: Date;  // When unpaid booking should be auto-deleted (20 min from creation)
+
+  @Prop()
+  seatReserved?: boolean;   // Whether seat is temporarily reserved during payment
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
@@ -214,3 +223,5 @@ BookingSchema.index({ "payment.status": 1 });
 BookingSchema.index({ location: "2dsphere" });
 BookingSchema.index({ createdAt: -1 });
 BookingSchema.index({ isRecurring: 1, parentBookingId: 1 });
+// Index for payment timeout cron job
+BookingSchema.index({ status: 1, paymentExpiresAt: 1 });

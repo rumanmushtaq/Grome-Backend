@@ -11,7 +11,10 @@ import { SocketIOAdapter } from './config/socket-io.adapter';
 import { Express } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Enable raw body for Stripe webhook
+    rawBody: true,
+  });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
