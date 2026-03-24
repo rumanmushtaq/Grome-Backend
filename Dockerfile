@@ -37,9 +37,10 @@ COPY --from=builder /app/dist ./dist
 
 # Set environment variables
 ENV NODE_ENV=production
+ENV PORT=8080
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8080
 
 # Start the application
 # Note: The build output is in dist/src/main.js due to the project structure.
