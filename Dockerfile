@@ -42,5 +42,5 @@ ENV NODE_ENV=production
 EXPOSE 3000
 
 # Start the application
-# We use module-alias/register to handle aliases in production
-CMD ["node", "-r", "module-alias/register", "dist/main.js"]
+# Note: The build output is in dist/src/main.js due to the project structure.
+CMD ["node", "-r", "module-alias/register", "dist/src/main.js"]
