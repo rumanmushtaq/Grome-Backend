@@ -20,29 +20,9 @@ import { CurrentUser } from "@/common/decorators/current-user.decorator";
 import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { Public } from "@/common/decorators/public.decorator";
+import { CreateBookingPaymentDto } from "@/dto/payment/create-payment.dto";
 
-class CreateBookingPaymentDto {
-  barberId: string;
-  services: Array<{
-    serviceId: string;
-    price: number;
-    duration: number;
-    name: string;
-  }>;
-  scheduledAt: string;
-  type?: string;
-  location?: {
-    longitude: number;
-    latitude: number;
-    address?: string;
-    city?: string;
-    postalCode?: string;
-    country?: string;
-  };
-  specialRequests?: string;
-  customerNotes?: string;
-  promoCodeId?: string;
-}
+
 
 @ApiTags("payments")
 @Controller("payments")
