@@ -1,8 +1,8 @@
-import { IoAdapter } from '@nestjs/platform-socket.io';
-import { ServerOptions } from 'socket.io';
-import { createAdapter } from '@socket.io/redis-adapter';
-import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import { IoAdapter } from "@nestjs/platform-socket.io";
+import { ServerOptions } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { ConfigService } from "@nestjs/config";
+import Redis from "ioredis";
 
 export class SocketIOAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
@@ -12,17 +12,24 @@ export class SocketIOAdapter extends IoAdapter {
   }
 
   async connectToRedis(): Promise<void> {
-    const redisHost = this.configService.get('redis.host');
-    const redisPort = this.configService.get('redis.port');
-    const redisPassword = this.configService.get('redis.password');
-    const redisDb = this.configService.get('redis.db');
+    const redisHost = this.configService.get("redis.host");
+    const redisPort = this.configService.get("redis.port");
+    const redisPassword = this.configService.get("redis.password");
+    const redisDb = this.configService.get("redis.db");
+    const redisTls = this.configService.get("redis.tls");
 
-    const pubClient = new Redis({
+    const redisOptions: any = {
       host: redisHost,
       port: redisPort,
       password: redisPassword,
       db: redisDb,
-    });
+    };
+
+    if (redisTls) {
+      redisOptions.tls = {};
+    }
+
+    const pubClient = new Redis(redisOptions);
 
     const subClient = pubClient.duplicate();
 

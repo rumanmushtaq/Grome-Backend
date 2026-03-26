@@ -1,33 +1,34 @@
-import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Module } from "@nestjs/common";
+import { BullModule } from "@nestjs/bull";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 
-import { NotificationProcessor } from './notification.processor';
-import { EmailProcessor } from './email.processor';
-import { PaymentProcessor } from './payment.processor';
-import { BookingProcessor } from './booking.processor';
-import { JobsService } from './jobs.service';
-import { JobsController } from './jobs.controller';
-import { NotificationsModule } from '../modules/notifications/notifications.module';
+import { NotificationProcessor } from "./notification.processor";
+import { EmailProcessor } from "./email.processor";
+import { PaymentProcessor } from "./payment.processor";
+import { BookingProcessor } from "./booking.processor";
+import { JobsService } from "./jobs.service";
+import { JobsController } from "./jobs.controller";
+import { NotificationsModule } from "../modules/notifications/notifications.module";
 
 @Module({
   imports: [
     BullModule.registerQueueAsync({
-      name: 'notifications',
+      name: "notifications",
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host: configService.get('redis.host'),
-          port: configService.get('redis.port'),
-          password: configService.get('redis.password'),
-          db: configService.get('redis.db'),
+          host: configService.get("redis.host"),
+          port: configService.get("redis.port"),
+          password: configService.get("redis.password"),
+          db: configService.get("redis.db"),
+          tls: configService.get("redis.tls") ? {} : undefined,
         },
         defaultJobOptions: {
           removeOnComplete: 100,
           removeOnFail: 50,
           attempts: 3,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 2000,
           },
         },
@@ -35,21 +36,22 @@ import { NotificationsModule } from '../modules/notifications/notifications.modu
       inject: [ConfigService],
     }),
     BullModule.registerQueueAsync({
-      name: 'email',
+      name: "email",
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host: configService.get('redis.host'),
-          port: configService.get('redis.port'),
-          password: configService.get('redis.password'),
-          db: configService.get('redis.db'),
+          host: configService.get("redis.host"),
+          port: configService.get("redis.port"),
+          password: configService.get("redis.password"),
+          db: configService.get("redis.db"),
+          tls: configService.get("redis.tls") ? {} : undefined,
         },
         defaultJobOptions: {
           removeOnComplete: 50,
           removeOnFail: 25,
           attempts: 3,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 5000,
           },
         },
@@ -57,21 +59,22 @@ import { NotificationsModule } from '../modules/notifications/notifications.modu
       inject: [ConfigService],
     }),
     BullModule.registerQueueAsync({
-      name: 'payments',
+      name: "payments",
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host: configService.get('redis.host'),
-          port: configService.get('redis.port'),
-          password: configService.get('redis.password'),
-          db: configService.get('redis.db'),
+          host: configService.get("redis.host"),
+          port: configService.get("redis.port"),
+          password: configService.get("redis.password"),
+          db: configService.get("redis.db"),
+          tls: configService.get("redis.tls") ? {} : undefined,
         },
         defaultJobOptions: {
           removeOnComplete: 20,
           removeOnFail: 10,
           attempts: 5,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 10000,
           },
         },
@@ -79,21 +82,22 @@ import { NotificationsModule } from '../modules/notifications/notifications.modu
       inject: [ConfigService],
     }),
     BullModule.registerQueueAsync({
-      name: 'bookings',
+      name: "bookings",
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         redis: {
-          host: configService.get('redis.host'),
-          port: configService.get('redis.port'),
-          password: configService.get('redis.password'),
-          db: configService.get('redis.db'),
+          host: configService.get("redis.host"),
+          port: configService.get("redis.port"),
+          password: configService.get("redis.password"),
+          db: configService.get("redis.db"),
+          tls: configService.get("redis.tls") ? {} : undefined,
         },
         defaultJobOptions: {
           removeOnComplete: 30,
           removeOnFail: 15,
           attempts: 3,
           backoff: {
-            type: 'exponential',
+            type: "exponential",
             delay: 3000,
           },
         },
@@ -110,9 +114,6 @@ import { NotificationsModule } from '../modules/notifications/notifications.modu
     BookingProcessor,
     JobsService,
   ],
-  exports: [
-    BullModule,
-    JobsService,
-  ],
+  exports: [BullModule, JobsService],
 })
 export class JobsModule {}
