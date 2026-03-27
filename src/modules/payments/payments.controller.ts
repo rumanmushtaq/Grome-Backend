@@ -118,7 +118,6 @@ export class PaymentsController {
     @CurrentUser() user: { userId: string },
     @Param("bookingId") bookingId: string,
   ) {
-    // Implementation can be added if needed
-    return { message: "Payment status endpoint" };
+    return this.paymentsService.getPaymentStatus(bookingId, user.userId);
   }
 }

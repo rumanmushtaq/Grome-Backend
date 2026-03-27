@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -225,6 +226,39 @@ export class PaymentsService {
       paymentExpiresAt: booking.paymentExpiresAt,
       seatReserved: booking.seatReserved,
       createdAt: booking.createdAt,
+    };
+  }
+
+  /**
+   * Get payment status for a booking
+   */
+  async getPaymentStatus(bookingId: string, userId: string) {
+    const booking = await this.bookingModel.findById(bookingId).lean();
+
+    if (!booking) {
+      throw new NotFoundException("Booking not found");
+    }
+
+    // Authorization check
+    const barber = await this.barberModel
+      .findOne({ userId })
+      .select("_id")
+      .lean();
+
+    if (
+      booking.customerId.toString() !== userId &&
+      (!barber || booking.barberId.toString() !== barber._id.toString())
+    ) {
+      throw new ForbiddenException(
+        "Not authorized to view this payment status",
+      );
+    }
+
+    return {
+      bookingId: booking._id,
+      status: booking.status,
+      payment: booking.payment,
+      paymentExpiresAt: booking.paymentExpiresAt,
     };
   }
 }
