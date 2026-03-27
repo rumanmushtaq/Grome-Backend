@@ -11,7 +11,7 @@ export class PaymentCleanupService {
   /**
    * Run every minute to clean up expired pending bookings
    */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async handleExpiredBookings() {
     this.logger.debug("Running expired bookings cleanup...");
 
