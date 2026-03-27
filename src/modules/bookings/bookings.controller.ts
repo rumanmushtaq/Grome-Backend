@@ -49,11 +49,10 @@ export class BookingsController {
   })
   async createBooking(
     @CurrentUser() user: any,
-    @Body() createBookingDto: CreateBookingDto
-  ): Promise<BookingResponseDto> {
+    @Body() createBookingDto: CreateBookingDto,
+  ): Promise<{ booking: BookingResponseDto; clientSecret?: string }> {
     return this.bookingsService.createBooking(user.userId, createBookingDto);
   }
-
 
   @Get("availability")
   @ApiQuery({ name: "barberId", required: true, type: String })
@@ -100,7 +99,7 @@ export class BookingsController {
   })
   async getBookingById(
     @Param("id") id: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
     return this.bookingsService.getBookingById(id, user.userId, user.role);
   }
@@ -116,13 +115,13 @@ export class BookingsController {
   async updateBooking(
     @Param("id") id: string,
     @Body() updateBookingDto: UpdateBookingDto,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
     return this.bookingsService.updateBooking(
       id,
       updateBookingDto,
       user.userId,
-      user.role
+      user.role,
     );
   }
 
@@ -137,13 +136,9 @@ export class BookingsController {
   async cancelBooking(
     @Param("id") id: string,
     @Body() body: { reason?: string },
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
-    return this.bookingsService.cancelBooking(
-      id,
-      user,
-      body.reason
-    );
+    return this.bookingsService.cancelBooking(id, user, body.reason);
   }
 
   @Patch(":id/accept")
@@ -157,7 +152,7 @@ export class BookingsController {
   })
   async acceptBooking(
     @Param("id") id: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
     return this.bookingsService.acceptBooking(id, user.userId);
   }
@@ -173,7 +168,7 @@ export class BookingsController {
   })
   async startBooking(
     @Param("id") id: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
     return this.bookingsService.startBooking(id, user.userId);
   }
@@ -190,14 +185,12 @@ export class BookingsController {
   async completeBooking(
     @Param("id") id: string,
     @Body() body: { barberNotes?: string },
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
   ): Promise<BookingResponseDto> {
     return this.bookingsService.completeBooking(
       id,
       user.userId,
-      body.barberNotes
+      body.barberNotes,
     );
   }
-
-  
 }

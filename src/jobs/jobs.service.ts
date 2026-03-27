@@ -1,16 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bull";
+import { Queue } from "bull";
 
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
 
   constructor(
-    @InjectQueue('notifications') private notificationsQueue: Queue,
-    @InjectQueue('email') private emailQueue: Queue,
-    @InjectQueue('payments') private paymentsQueue: Queue,
-    @InjectQueue('bookings') private bookingsQueue: Queue,
+    @InjectQueue("notifications") private notificationsQueue: Queue,
+    @InjectQueue("email") private emailQueue: Queue,
+    @InjectQueue("payments") private paymentsQueue: Queue,
+    @InjectQueue("bookings") private bookingsQueue: Queue,
   ) {}
 
   // Notification Jobs
@@ -25,23 +25,29 @@ export class JobsService {
     conversationId?: string;
     fromUserId?: string;
   }) {
-    return this.notificationsQueue.add('send-notification', data, {
-      priority: data.type === 'urgent' ? 10 : 1,
+    return this.notificationsQueue.add("send-notification", data, {
+      priority: data.type === "urgent" ? 10 : 1,
     });
   }
 
   async sendBulkNotifications(notifications: any[]) {
-    return this.notificationsQueue.add('send-bulk-notifications', { notifications });
+    return this.notificationsQueue.add("send-bulk-notifications", {
+      notifications,
+    });
   }
 
   // Email Jobs
   async sendWelcomeEmail(userEmail: string, userName: string) {
-    return this.emailQueue.add('send-welcome-email', {
-      userEmail,
-      userName,
-    }, {
-      delay: 5000, // Send after 5 seconds
-    });
+    return this.emailQueue.add(
+      "send-welcome-email",
+      {
+        userEmail,
+        userName,
+      },
+      {
+        delay: 5000, // Send after 5 seconds
+      },
+    );
   }
 
   async sendBookingConfirmation(data: {
@@ -51,7 +57,7 @@ export class JobsService {
     scheduledAt: Date;
     services: any[];
   }) {
-    return this.emailQueue.add('send-booking-confirmation', data);
+    return this.emailQueue.add("send-booking-confirmation", data);
   }
 
   async sendBookingReminderEmail(data: {
@@ -60,13 +66,17 @@ export class JobsService {
     barberName: string;
     scheduledAt: Date;
   }) {
-    return this.emailQueue.add('send-booking-reminder', data, {
+    return this.emailQueue.add("send-booking-reminder", data, {
       delay: 24 * 60 * 60 * 1000, // Send 24 hours before
     });
   }
 
-  async sendPasswordReset(userEmail: string, userName: string, resetToken: string) {
-    return this.emailQueue.add('send-password-reset', {
+  async sendPasswordReset(
+    userEmail: string,
+    userName: string,
+    resetToken: string,
+  ) {
+    return this.emailQueue.add("send-password-reset", {
       userEmail,
       userName,
       resetToken,
@@ -81,7 +91,7 @@ export class JobsService {
     paymentMethodId: string;
     customerId: string;
   }) {
-    return this.paymentsQueue.add('process-payment', data, {
+    return this.paymentsQueue.add("process-payment", data, {
       priority: 10, // High priority for payments
       attempts: 5,
     });
@@ -94,7 +104,7 @@ export class JobsService {
     bookingId: string;
     customerId: string;
   }) {
-    return this.paymentsQueue.add('process-refund', data, {
+    return this.paymentsQueue.add("process-refund", data, {
       priority: 8,
       attempts: 3,
     });
@@ -106,15 +116,19 @@ export class JobsService {
     bankAccountId: string;
     bookingId: string;
   }) {
-    return this.paymentsQueue.add('process-payout', data, {
+    return this.paymentsQueue.add("process-payout", data, {
       delay: 24 * 60 * 60 * 1000, // Process payout after 24 hours
     });
   }
 
   async handleWebhook(event: any) {
-    return this.paymentsQueue.add('handle-webhook', { event }, {
-      priority: 5,
-    });
+    return this.paymentsQueue.add(
+      "handle-webhook",
+      { event },
+      {
+        priority: 5,
+      },
+    );
   }
 
   // Booking Jobs
@@ -127,7 +141,7 @@ export class JobsService {
     customerName: string;
     barberName: string;
   }) {
-    return this.bookingsQueue.add('send-booking-confirmation', data);
+    return this.bookingsQueue.add("send-booking-confirmation", data);
   }
 
   async sendBookingReminder(data: {
@@ -138,7 +152,7 @@ export class JobsService {
     customerName: string;
     barberName: string;
   }) {
-    return this.bookingsQueue.add('send-booking-reminder', data, {
+    return this.bookingsQueue.add("send-booking-reminder", data, {
       delay: 24 * 60 * 60 * 1000, // Send 24 hours before
     });
   }
@@ -152,7 +166,7 @@ export class JobsService {
     customerName: string;
     barberName: string;
   }) {
-    return this.bookingsQueue.add('send-booking-cancellation', data);
+    return this.bookingsQueue.add("send-booking-cancellation", data);
   }
 
   async sendBookingCompletion(data: {
@@ -162,19 +176,38 @@ export class JobsService {
     customerName: string;
     barberName: string;
   }) {
-    return this.bookingsQueue.add('send-booking-completion', data);
+    return this.bookingsQueue.add("send-booking-completion", data);
   }
 
   async cleanupExpiredBookings() {
-    return this.bookingsQueue.add('cleanup-expired-bookings', {}, {
-      repeat: { cron: '0 0 * * *' }, // Run daily at midnight
-    });
+    return this.bookingsQueue.add(
+      "cleanup-expired-bookings",
+      {},
+      {
+        repeat: { cron: "0 0 * * *" }, // Run daily at midnight
+      },
+    );
+  }
+
+  async scheduleBookingExpiry(bookingId: string) {
+    return this.bookingsQueue.add(
+      "delete-expired-booking",
+      { bookingId },
+      {
+        delay: 20 * 60 * 1000, // 20 minutes
+        removeOnComplete: true,
+      },
+    );
   }
 
   async scheduleBookingReminders() {
-    return this.bookingsQueue.add('schedule-booking-reminders', {}, {
-      repeat: { cron: '0 6 * * *' }, // Run daily at 6 AM
-    });
+    return this.bookingsQueue.add(
+      "schedule-booking-reminders",
+      {},
+      {
+        repeat: { cron: "0 6 * * *" }, // Run daily at 6 AM
+      },
+    );
   }
 
   // Queue Management
@@ -192,10 +225,26 @@ export class JobsService {
       payments,
       bookings,
       total: {
-        waiting: notifications.waiting + email.waiting + payments.waiting + bookings.waiting,
-        active: notifications.active + email.active + payments.active + bookings.active,
-        completed: notifications.completed + email.completed + payments.completed + bookings.completed,
-        failed: notifications.failed + email.failed + payments.failed + bookings.failed,
+        waiting:
+          notifications.waiting +
+          email.waiting +
+          payments.waiting +
+          bookings.waiting,
+        active:
+          notifications.active +
+          email.active +
+          payments.active +
+          bookings.active,
+        completed:
+          notifications.completed +
+          email.completed +
+          payments.completed +
+          bookings.completed,
+        failed:
+          notifications.failed +
+          email.failed +
+          payments.failed +
+          bookings.failed,
       },
     };
   }
@@ -247,19 +296,21 @@ export class JobsService {
       for (const job of failedJobs) {
         await job.retry();
       }
-      this.logger.log(`Retried ${failedJobs.length} failed jobs in queue ${queueName}`);
+      this.logger.log(
+        `Retried ${failedJobs.length} failed jobs in queue ${queueName}`,
+      );
     }
   }
 
   private getQueueByName(queueName: string): Queue | null {
     switch (queueName) {
-      case 'notifications':
+      case "notifications":
         return this.notificationsQueue;
-      case 'email':
+      case "email":
         return this.emailQueue;
-      case 'payments':
+      case "payments":
         return this.paymentsQueue;
-      case 'bookings':
+      case "bookings":
         return this.bookingsQueue;
       default:
         return null;
@@ -271,14 +322,14 @@ export class JobsService {
     try {
       const stats = await this.getQueueStats();
       return {
-        status: 'healthy',
+        status: "healthy",
         queues: stats,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      this.logger.error('Health check failed:', error);
+      this.logger.error("Health check failed:", error);
       return {
-        status: 'unhealthy',
+        status: "unhealthy",
         error: error.message,
         timestamp: new Date().toISOString(),
       };

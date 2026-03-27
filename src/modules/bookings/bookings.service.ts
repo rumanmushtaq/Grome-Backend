@@ -9,24 +9,27 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 
 import {
-  Booking,
-  BookingDocument,
-  BookingStatus,
-} from "../../schemas/booking.schema";
-import { User, UserDocument } from "../../schemas/user.schema";
-import { Barber, BarberDocument } from "../../schemas/barber.schema";
-import {
   CreateBookingDto,
   UpdateBookingDto,
   BookingQueryDto,
   BookingResponseDto,
 } from "../../dto/bookings/booking.dto";
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+  BookingType,
+} from "../../schemas/booking.schema";
+import { User, UserDocument, UserRole } from "../../schemas/user.schema";
+import { Barber, BarberDocument } from "../../schemas/barber.schema";
 import { GetBarberAvailabilityDto } from "./dtos/booking.dto";
 import * as moment from "moment";
 import { InjectConnection } from "@nestjs/mongoose";
 import { Connection, ClientSession } from "mongoose";
 import { Logger } from "@nestjs/common";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PaymentsService } from "../payments/payments.service";
+import { JobsService } from "../../jobs/jobs.service";
 import {
   NotificationChannel,
   NotificationType,
@@ -41,6 +44,8 @@ export class BookingsService {
     @InjectConnection() private readonly connection: Connection,
 
     private readonly notificationsService: NotificationsService,
+    private readonly paymentsService: PaymentsService,
+    private readonly jobsService: JobsService,
   ) {}
 
   // async createBooking(
@@ -210,7 +215,7 @@ export class BookingsService {
   async createBooking(
     customerId: string,
     createBookingDto: CreateBookingDto,
-  ): Promise<BookingResponseDto> {
+  ): Promise<{ booking: BookingResponseDto; clientSecret?: string }> {
     try {
       const {
         barberId,
@@ -266,30 +271,35 @@ export class BookingsService {
         throw new BadRequestException("Invalid service pricing");
       }
 
-      const commissionRate = barber.commissionRate ?? 0;
+      const commissionRate = barber.commissionRate ?? 0.1;
       const commission = totalAmount * commissionRate;
       const payoutAmount = totalAmount - commission;
 
-      // 5️⃣ Create booking
+      // 5️⃣ Calculate expiration
+      const paymentExpiresAt = new Date();
+      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 20);
+
+      // 6️⃣ Create booking (PENDING_PAYMENT)
       const booking = await this.bookingModel.create({
         customerId,
         barberId,
         services,
         scheduledAt: scheduledDate,
-        type,
+        type: type || BookingType.SCHEDULED,
         location: location
           ? {
               type: "Point",
               coordinates: [location.longitude, location.latitude],
-              address: location.address,
-              city: location.city,
-              postalCode: location.postalCode,
-              country: location.country,
             }
           : undefined,
+        address: location?.address,
+        city: location?.city,
+        postalCode: location?.postalCode,
+        country: location?.country,
         specialRequests,
         customerNotes,
         promoCodeId,
+        status: BookingStatus.PENDING_PAYMENT,
         payment: {
           status: "pending",
           amount: totalAmount,
@@ -297,26 +307,36 @@ export class BookingsService {
           commission,
           payoutAmount,
         },
+        paymentExpiresAt,
+        seatReserved: true,
         source: "mobile_app",
       });
 
-      // 🔔 Side effects (async, non-blocking)
-      this.sendBookingNotifications(booking).catch(console.error);
+      // 7️⃣ Initialize Payment
+      const { clientSecret, paymentIntentId } =
+        await this.paymentsService.initializeBookingPayment(
+          booking,
+          customer as any,
+        );
 
-      return this.mapToResponseDto(booking);
+      // Update booking with payment intent ID
+      booking.payment.stripePaymentIntentId = paymentIntentId;
+      await booking.save();
+
+      // 8️⃣ Schedule expiry job
+      await this.jobsService.scheduleBookingExpiry(booking._id.toString());
+
+      // 🔔 Side effects (async, non-blocking)
+      // Notifications are usually sent after payment success now, but maybe a "pending" one?
+      // this.sendBookingNotifications(booking).catch(console.error);
+
+      return {
+        booking: this.mapToResponseDto(booking),
+        clientSecret,
+      };
     } catch (error) {
       console.error("Booking creation failed:", error);
-
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(
-        "Unable to create booking at this time",
-      );
+      throw error;
     }
   }
 
@@ -332,10 +352,13 @@ export class BookingsService {
     }
 
     // Check permissions
+    const authId =
+      userRole === "barber" ? await this.getBarberIdByUserId(userId) : userId;
+
     if (
       userRole !== "admin" &&
-      booking.customerId.toString() !== userId &&
-      booking.barberId.toString() !== userId
+      booking.customerId.toString() !== authId &&
+      booking.barberId.toString() !== authId
     ) {
       throw new ForbiddenException("Not authorized to update this booking");
     }
@@ -404,10 +427,13 @@ export class BookingsService {
     }
 
     // Check permissions
+    const authId =
+      userRole === "barber" ? await this.getBarberIdByUserId(userId) : userId;
+
     if (
       userRole !== "admin" &&
-      booking.customerId.toString() !== userId &&
-      booking.barberId.toString() !== userId
+      booking.customerId.toString() !== authId &&
+      booking.barberId.toString() !== authId
     ) {
       throw new ForbiddenException("Not authorized to view this booking");
     }
@@ -703,12 +729,14 @@ export class BookingsService {
 
   async startBooking(
     bookingId: string,
-    barberId: string,
+    userId: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
+
+    const barberId = await this.getBarberIdByUserId(userId);
 
     if (booking.barberId.toString() !== barberId) {
       throw new ForbiddenException("Not authorized to start this booking");
@@ -729,13 +757,15 @@ export class BookingsService {
 
   async completeBooking(
     bookingId: string,
-    barberId: string,
+    userId: string,
     barberNotes?: string,
   ): Promise<BookingResponseDto> {
     const booking = await this.bookingModel.findById(bookingId);
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
+
+    const barberId = await this.getBarberIdByUserId(userId);
 
     if (booking.barberId.toString() !== barberId) {
       throw new ForbiddenException("Not authorized to complete this booking");

@@ -11,7 +11,12 @@ import {
   Get,
   Param,
 } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { PaymentsService } from "./payments.service";
 import { StripeService } from "./stripe.service";
@@ -21,8 +26,6 @@ import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { Public } from "@/common/decorators/public.decorator";
 import { CreateBookingPaymentDto } from "@/dto/payment/create-payment.dto";
-
-
 
 @ApiTags("payments")
 @Controller("payments")
@@ -36,26 +39,6 @@ export class PaymentsController {
   ) {}
 
   /**
-   * Create a pending booking with Stripe payment intent
-   */
-  @Post("booking")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: "Create booking with payment",
-    description: "Creates a pending booking and returns Stripe client secret for payment",
-  })
-  @ApiResponse({ status: 201, description: "Booking created, awaiting payment" })
-  @ApiResponse({ status: 400, description: "Slot not available" })
-  @ApiResponse({ status: 404, description: "Barber or customer not found" })
-  async createBookingWithPayment(
-    @CurrentUser() user: { userId: string },
-    @Body() dto: CreateBookingPaymentDto
-  ) {
-    return this.paymentsService.createPendingBookingWithPayment(user.userId, dto);
-  }
-
-  /**
    * Stripe webhook handler - NO AUTH REQUIRED
    */
   @Post("webhook")
@@ -63,14 +46,17 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Stripe webhook",
-    description: "Handles Stripe payment events (payment_intent.succeeded, payment_intent.payment_failed)",
+    description:
+      "Handles Stripe payment events (payment_intent.succeeded, payment_intent.payment_failed)",
   })
   async handleWebhook(
     @Req() req: Request,
     @Res() res: Response,
-    @Headers("stripe-signature") signature: string
+    @Headers("stripe-signature") signature: string,
   ) {
-    const webhookSecret = this.configService.get<string>("STRIPE_WEBHOOK_SECRET");
+    const webhookSecret = this.configService.get<string>(
+      "STRIPE_WEBHOOK_SECRET",
+    );
 
     if (!webhookSecret) {
       this.logger.error("STRIPE_WEBHOOK_SECRET not configured");
@@ -88,10 +74,12 @@ export class PaymentsController {
       event = this.stripeService.constructWebhookEvent(
         req.body,
         signature,
-        webhookSecret
+        webhookSecret,
       );
     } catch (err) {
-      this.logger.error(`Webhook signature verification failed: ${err.message}`);
+      this.logger.error(
+        `Webhook signature verification failed: ${err.message}`,
+      );
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -128,7 +116,7 @@ export class PaymentsController {
   @ApiOperation({ summary: "Get payment status" })
   async getPaymentStatus(
     @CurrentUser() user: { userId: string },
-    @Param("bookingId") bookingId: string
+    @Param("bookingId") bookingId: string,
   ) {
     // Implementation can be added if needed
     return { message: "Payment status endpoint" };

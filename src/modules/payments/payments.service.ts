@@ -1,8 +1,17 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { StripeService } from "./stripe.service";
-import { Booking, BookingDocument, BookingStatus } from "@/schemas/booking.schema";
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+} from "@/schemas/booking.schema";
 import { User, UserDocument } from "@/schemas/user.schema";
 import { Barber, BarberDocument } from "@/schemas/barber.schema";
 import { PaymentStatus } from "./enums/payment.enum";
@@ -19,156 +28,54 @@ export class PaymentsService {
   ) {}
 
   /**
-   * Create a pending booking and initiate Stripe payment
+   * Initialize Stripe payment for a booking
    * Returns client secret for frontend to complete payment
    */
-  async createPendingBookingWithPayment(
-    customerId: string,
-    createBookingDto: any
+  async initializeBookingPayment(
+    booking: BookingDocument,
+    customer: UserDocument,
   ): Promise<{
-    booking: any;
     clientSecret: string;
     paymentIntentId: string;
   }> {
-    const session = await this.bookingModel.db.startSession();
-
     try {
-      session.startTransaction();
-
-      const {
-        barberId,
-        services,
-        scheduledAt,
-        type,
-        location,
-        specialRequests,
-        customerNotes,
-        promoCodeId,
-      } = createBookingDto;
-
-      // 1. Validate barber
-      const barber = await this.barberModel.findById(barberId).session(session).lean();
-      if (!barber || !barber.isActive) {
-        throw new NotFoundException("Barber not found or inactive");
-      }
-
-      // 2. Validate customer
-      const customer = await this.userModel.findById(customerId).session(session).lean();
-      if (!customer || !customer.isActive) {
-        throw new NotFoundException("Customer not found or inactive");
-      }
-
-      // 3. Check slot availability (excluding pending_payment bookings that are expired)
-      const scheduledDate = new Date(scheduledAt);
-      const isAvailable = await this.checkSlotAvailability(barberId, scheduledDate, session);
-      if (!isAvailable) {
-        throw new BadRequestException("This slot is no longer available");
-      }
-
-      // 4. Calculate totals
-      const totalAmount = services.reduce((sum: number, s: any) => sum + s.price, 0);
-      const commissionRate = barber.commissionRate ?? 0.1; // Default 10%
-      const commission = totalAmount * commissionRate;
-      const payoutAmount = totalAmount - commission;
-
-      // 5. Create Stripe customer if not exists
+      // 1. Create Stripe customer if not exists
       let stripeCustomerId = customer.stripeCustomerId;
       if (!stripeCustomerId) {
         const stripeCustomer = await this.stripeService.createCustomer({
           email: customer.email,
           name: customer.name,
           phone: customer.phone,
-          metadata: { userId: customerId },
+          metadata: { userId: customer._id.toString() },
         });
         stripeCustomerId = stripeCustomer.id;
-        
+
         // Save stripe customer ID to user
-        await this.userModel.findByIdAndUpdate(
-          customerId,
-          { stripeCustomerId },
-          { session }
-        );
+        await this.userModel.findByIdAndUpdate(customer._id, {
+          stripeCustomerId,
+        });
       }
 
-      // 6. Calculate payment expiration (20 minutes from now)
-      const paymentExpiresAt = new Date();
-      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 20);
-
-      // 7. Create booking with pending_payment status
-      const [booking] = await this.bookingModel.create(
-        [
-          {
-            customerId: new Types.ObjectId(customerId),
-            barberId: new Types.ObjectId(barberId),
-            services,
-            scheduledAt: scheduledDate,
-            type: type || "scheduled",
-            location: location
-              ? {
-                  type: "Point",
-                  coordinates: [location.longitude, location.latitude],
-                }
-              : undefined,
-            address: location?.address,
-            city: location?.city,
-            postalCode: location?.postalCode,
-            country: location?.country,
-            specialRequests,
-            customerNotes,
-            promoCodeId: promoCodeId ? new Types.ObjectId(promoCodeId) : undefined,
-            status: BookingStatus.PENDING_PAYMENT,
-            payment: {
-              status: PaymentStatus.PENDING,
-              amount: totalAmount,
-              currency: "USD",
-              commission,
-              payoutAmount,
-            },
-            paymentExpiresAt,
-            seatReserved: true,
-            source: "mobile_app",
-          },
-        ],
-        { session }
-      );
-
-      // 8. Create Stripe Payment Intent
+      // 2. Create Stripe Payment Intent
       const paymentIntent = await this.stripeService.createPaymentIntent({
-        amount: Math.round(totalAmount * 100), // Convert to cents
-        currency: "usd",
+        amount: Math.round(booking.payment.amount * 100), // Convert to cents
+        currency: booking.payment.currency || "usd",
         customerId: stripeCustomerId,
         metadata: {
           bookingId: booking._id.toString(),
-          customerId,
-          barberId,
+          customerId: booking.customerId.toString(),
+          barberId: booking.barberId.toString(),
         },
-        description: `Booking #${booking._id} - ${services.map((s: any) => s.name).join(", ")}`,
+        description: `Booking #${booking._id} - ${booking.services.map((s: any) => s.name).join(", ")}`,
       });
 
-      // 9. Update booking with payment intent ID
-      await this.bookingModel.findByIdAndUpdate(
-        booking._id,
-        {
-          "payment.stripePaymentIntentId": paymentIntent.id,
-        },
-        { session }
-      );
-
-      await session.commitTransaction();
-
-      this.logger.log(`Pending booking created: ${booking._id} with PaymentIntent: ${paymentIntent.id}`);
-
       return {
-        booking: this.mapToResponseDto(booking),
         clientSecret: paymentIntent.client_secret!,
         paymentIntentId: paymentIntent.id,
       };
     } catch (error) {
-      await session.abortTransaction();
-      this.logger.error("Failed to create pending booking", error);
+      this.logger.error("Failed to initialize booking payment", error);
       throw error;
-    } finally {
-      session.endSession();
     }
   }
 
@@ -181,12 +88,16 @@ export class PaymentsService {
     });
 
     if (!booking) {
-      this.logger.warn(`Booking not found for PaymentIntent: ${paymentIntentId}`);
+      this.logger.warn(
+        `Booking not found for PaymentIntent: ${paymentIntentId}`,
+      );
       return;
     }
 
     if (booking.status !== BookingStatus.PENDING_PAYMENT) {
-      this.logger.warn(`Booking ${booking._id} is not in pending_payment status`);
+      this.logger.warn(
+        `Booking ${booking._id} is not in pending_payment status`,
+      );
       return;
     }
 
@@ -212,7 +123,9 @@ export class PaymentsService {
     });
 
     if (!booking) {
-      this.logger.warn(`Booking not found for PaymentIntent: ${paymentIntentId}`);
+      this.logger.warn(
+        `Booking not found for PaymentIntent: ${paymentIntentId}`,
+      );
       return;
     }
 
@@ -246,7 +159,9 @@ export class PaymentsService {
         _id: { $in: expiredBookings.map((b) => b._id) },
       });
 
-      this.logger.log(`Deleted ${expiredBookings.length} expired pending bookings`);
+      this.logger.log(
+        `Deleted ${expiredBookings.length} expired pending bookings`,
+      );
     }
 
     return {
@@ -261,7 +176,7 @@ export class PaymentsService {
   private async checkSlotAvailability(
     barberId: string,
     scheduledAt: Date,
-    session?: any
+    session?: any,
   ): Promise<boolean> {
     const now = new Date();
 
