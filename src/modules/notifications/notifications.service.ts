@@ -21,6 +21,7 @@ import {
 import { User, UserDocument } from "../../schemas/user.schema";
 import { ChatMessageDocument } from "../../schemas/chat-message.schema";
 import { Barber, BarberDocument } from "@/schemas/barber.schema";
+import { FirebaseService } from "./firebase.service";
 
 @Injectable()
 export class NotificationsService {
@@ -37,7 +38,9 @@ export class NotificationsService {
     private readonly barberModel: Model<BarberDocument>,
 
     @InjectQueue("notifications")
-    private readonly notificationsQueue: Queue
+    private readonly notificationsQueue: Queue,
+
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   // ======================================================
@@ -55,16 +58,21 @@ export class NotificationsService {
     fromUserId?: string;
   }): Promise<NotificationDocument> {
     try {
+      let resolvedUserId = payload.userId;
       let user = await this.userModel.findById(payload.userId);
+
       if (!user) {
-        user = await this.barberModel.findById(payload.userId);
-        if (!user) {
+        const barber = await this.barberModel.findById(payload.userId);
+        if (barber) {
+          resolvedUserId = barber.userId.toString();
+        } else {
           throw new NotFoundException("User not found");
         }
       }
 
       const notification = await this.notificationModel.create({
         ...payload,
+        userId: resolvedUserId,
         status: NotificationStatus.PENDING,
         isUrgent: this.isUrgentNotification(payload.type),
         retryCount: 0,
@@ -243,7 +251,7 @@ export class NotificationsService {
     userId: string,
     page = 1,
     limit = 20,
-    unreadOnly = false
+    unreadOnly = false,
   ) {
     const skip = (page - 1) * limit;
 
@@ -282,7 +290,7 @@ export class NotificationsService {
   async markAsRead(notificationId: string, userId: string): Promise<void> {
     const result = await this.notificationModel.updateOne(
       { _id: notificationId, userId },
-      { status: NotificationStatus.READ, readAt: new Date() }
+      { status: NotificationStatus.READ, readAt: new Date() },
     );
 
     if (!result.matchedCount) {
@@ -298,7 +306,7 @@ export class NotificationsService {
           $in: [NotificationStatus.PENDING, NotificationStatus.SENT],
         },
       },
-      { status: NotificationStatus.READ, readAt: new Date() }
+      { status: NotificationStatus.READ, readAt: new Date() },
     );
   }
 
@@ -313,7 +321,7 @@ export class NotificationsService {
 
   async deleteNotification(
     notificationId: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     const result = await this.notificationModel.deleteOne({
       _id: notificationId,
@@ -388,7 +396,7 @@ export class NotificationsService {
     await this.notificationsQueue.add(
       "send-notification",
       { notificationId },
-      { delay }
+      { delay },
     );
   }
 
@@ -396,7 +404,35 @@ export class NotificationsService {
   // CHANNEL IMPLEMENTATIONS (STUBS)
   // ======================================================
   private async sendPushNotification(notification: NotificationDocument) {
-    this.logger.log(`PUSH → ${notification.userId}: ${notification.title}`);
+    const user = await this.userModel.findById(notification.userId);
+    if (!user) {
+      throw new Error(
+        `User ${notification.userId} not found for push notification`,
+      );
+    }
+
+    if (!user.fcmToken) {
+      this.logger.debug(`User ${user._id} has no FCM token. Skipping push.`);
+      return;
+    }
+
+    if (user.preferences?.notifications?.push === false) {
+      this.logger.debug(
+        `User ${user._id} has disabled push notifications. Skipping.`,
+      );
+      return;
+    }
+
+    await this.firebaseService.sendPush(
+      user.fcmToken,
+      notification.title,
+      notification.body,
+      {
+        ...notification.data,
+        type: notification.type,
+        notificationId: notification._id.toString(),
+      },
+    );
   }
 
   private async sendEmailNotification(notification: NotificationDocument) {

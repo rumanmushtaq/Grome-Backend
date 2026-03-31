@@ -28,6 +28,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import {
   UpdateProfileDto,
   UpdatePreferencesDto,
+  UpdateFcmTokenDto,
   BarberVerificationDto,
   UserResponseDto,
 } from "../../dto/users/user.dto";
@@ -65,7 +66,7 @@ export class UsersController {
   })
   async updateProfile(
     @CurrentUser() user: any,
-    @Body() updateProfileDto: UpdateProfileDto
+    @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updateProfile(user.userId, updateProfileDto);
   }
@@ -79,11 +80,28 @@ export class UsersController {
   })
   async updatePreferences(
     @CurrentUser() user: any,
-    @Body() updatePreferencesDto: UpdatePreferencesDto
+    @Body() updatePreferencesDto: UpdatePreferencesDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updatePreferences(
       user.userId,
-      updatePreferencesDto
+      updatePreferencesDto,
+    );
+  }
+
+  @Put("fcm-token")
+  @ApiOperation({ summary: "Update FCM token for push notifications" })
+  @ApiResponse({
+    status: 200,
+    description: "FCM token updated successfully",
+    type: UserResponseDto,
+  })
+  async updateFcmToken(
+    @CurrentUser() user: any,
+    @Body() updateFcmTokenDto: UpdateFcmTokenDto,
+  ): Promise<UserResponseDto> {
+    return this.usersService.updateFcmToken(
+      user.userId,
+      updateFcmTokenDto.fcmToken,
     );
   }
 
@@ -97,11 +115,11 @@ export class UsersController {
   })
   async submitBarberVerification(
     @CurrentUser() user: any,
-    @Body() verificationDto: BarberVerificationDto
+    @Body() verificationDto: BarberVerificationDto,
   ): Promise<UserResponseDto> {
     return this.usersService.submitBarberVerification(
       user.userId,
-      verificationDto
+      verificationDto,
     );
   }
 
@@ -117,14 +135,10 @@ export class UsersController {
   @ApiQuery({ name: "role", required: false, enum: UserRole })
   async getAllUsers(
     @Query() paginationDto: PaginationDto,
-    @Query("role") role?: UserRole
+    @Query("role") role?: UserRole,
   ) {
     console.log("Fetching users with role:", role);
-    return this.usersService.getAllUsers(
-
-      paginationDto,
-      role
-    );
+    return this.usersService.getAllUsers(paginationDto, role);
   }
 
   @Get(":id")
@@ -156,12 +170,12 @@ export class UsersController {
   async updateBarberVerification(
     @Param("id") id: string,
     @Body() verificationDto: { status: string; notes?: string },
-    @CurrentUser() admin: any
+    @CurrentUser() admin: any,
   ): Promise<UserResponseDto> {
     return this.usersService.updateBarberVerification(
       id,
       verificationDto,
-      admin.userId
+      admin.userId,
     );
   }
 
@@ -203,20 +217,16 @@ export class UsersController {
   })
   async toggleVerification(
     @Param("id") id: string,
-    @Query("isVerified") isVerified: boolean
+    @Query("isVerified") isVerified: boolean,
   ): Promise<UserResponseDto> {
     return this.usersService.toggleVerification(id, isVerified);
   }
-
-
-
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
   softDelete(@Param("id") id: string) {
     return this.usersService.softDeleteUser(id);
   }
-
 
   @Patch("restore/:id")
   @Roles(UserRole.ADMIN)

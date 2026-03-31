@@ -39,7 +39,7 @@ export class UsersService {
 
   async updateProfile(
     userId: string,
-    updateProfileDto: UpdateProfileDto
+    updateProfileDto: UpdateProfileDto,
   ): Promise<UserResponseDto> {
     const user = await this.userModel
       .findByIdAndUpdate(userId, { $set: updateProfileDto }, { new: true })
@@ -54,26 +54,37 @@ export class UsersService {
 
   async updatePreferences(
     userId: string,
-    updatePreferencesDto: UpdatePreferencesDto
+    updatePreferencesDto: UpdatePreferencesDto,
   ): Promise<UserResponseDto> {
-    const user = await this.userModel
-      .findByIdAndUpdate(
-        userId,
-        { $set: { preferences: updatePreferencesDto } },
-        { new: true }
-      )
-      .exec();
-
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: { preferences: updatePreferencesDto } },
+      { new: true },
+    );
     if (!user) {
       throw new NotFoundException("User not found");
     }
+    return this.mapToResponseDto(user);
+  }
 
+  async updateFcmToken(
+    userId: string,
+    fcmToken: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: { fcmToken } },
+      { new: true },
+    );
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
     return this.mapToResponseDto(user);
   }
 
   async submitBarberVerification(
     userId: string,
-    verificationDto: BarberVerificationDto
+    verificationDto: BarberVerificationDto,
   ): Promise<UserResponseDto> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -82,7 +93,7 @@ export class UsersService {
 
     if (user.role !== "barber") {
       throw new ForbiddenException(
-        "Only barbers can submit verification documents"
+        "Only barbers can submit verification documents",
       );
     }
 
@@ -102,7 +113,7 @@ export class UsersService {
   async updateBarberVerification(
     userId: string,
     verificationDto: { status: string; notes?: string },
-    adminId: string
+    adminId: string,
   ): Promise<UserResponseDto> {
     const user = await this.userModel
       .findByIdAndUpdate(
@@ -115,7 +126,7 @@ export class UsersService {
             "verification.reviewedBy": adminId,
           },
         },
-        { new: true }
+        { new: true },
       )
       .exec();
 
@@ -128,7 +139,7 @@ export class UsersService {
 
   async getAllUsers(
     paginationDto: PaginationDto,
-    role?: string
+    role?: string,
   ): Promise<{
     users: UserResponseDto[];
     total: number;
@@ -168,7 +179,7 @@ export class UsersService {
       const validSortFields = ["name", "email", "createdAt", "role"];
       if (!validSortFields.includes(sortBy)) {
         throw new BadRequestException(
-          `Invalid sortBy field. Valid fields: ${validSortFields.join(", ")}`
+          `Invalid sortBy field. Valid fields: ${validSortFields.join(", ")}`,
         );
       }
 
@@ -188,7 +199,7 @@ export class UsersService {
           return this.mapToResponseDto(user);
         } catch (mapError) {
           throw new InternalServerErrorException(
-            "Failed to map user data. Please try again later."
+            "Failed to map user data. Please try again later.",
           );
         }
       });
@@ -211,7 +222,7 @@ export class UsersService {
       // Catch unexpected errors
       console.error("Unexpected error in getAllUsers:", error);
       throw new InternalServerErrorException(
-        "An unexpected error occurred while fetching users"
+        "An unexpected error occurred while fetching users",
       );
     }
   }
@@ -242,7 +253,7 @@ export class UsersService {
 
   async toggleVerification(
     userId: string,
-    isVerified: boolean
+    isVerified: boolean,
   ): Promise<UserResponseDto> {
     const user = await this.userModel
       .findByIdAndUpdate(userId, { isVerified: isVerified }, { new: true })
@@ -285,7 +296,7 @@ export class UsersService {
 
       // Throw a proper NestJS exception
       throw new InternalServerErrorException(
-        "Failed to map user data. Please try again later."
+        "Failed to map user data. Please try again later.",
       );
     }
   }
@@ -317,7 +328,7 @@ export class UsersService {
       console.error("Soft delete error:", error);
 
       throw new InternalServerErrorException(
-        error?.message || "Failed to soft delete user. Please try again later."
+        error?.message || "Failed to soft delete user. Please try again later.",
       );
     }
   }
@@ -350,7 +361,7 @@ export class UsersService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        error?.message || "Failed to restore user. Please try again later."
+        error?.message || "Failed to restore user. Please try again later.",
       );
     }
   }

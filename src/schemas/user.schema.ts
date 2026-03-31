@@ -158,6 +158,9 @@ export class User {
   // Stripe customer ID for payments
   @Prop()
   stripeCustomerId?: string;
+
+  @Prop()
+  fcmToken?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
